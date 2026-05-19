@@ -1,0 +1,85 @@
+# Drift tracking manifest for the gh-aw-guide skill.
+#
+# Used by the gh-aw-guide-scraper scripts (Check-Staleness.ps1 / Scan-GhAwUpdates.ps1)
+# to detect when upstream gh-aw sources change.
+#
+# Paths are repo-root-relative.
+
+target: gh-aw-guide/SKILL.md
+secondary_targets:
+  - gh-aw-guide/references/architecture.md
+  - gh-aw-guide/references/migrations.md
+
+# Sections containing local operational knowledge that didn't come from upstream
+# docs. The scraper will never suggest removing or rewriting these.
+divergence:
+  - section: "Security Boundaries"
+    reason: "Defense-in-depth assessment and workflow-author guidance"
+  - section: "Safe Pattern: Checkout + Restore"
+    reason: "Documents the Checkout-GhAwPr.ps1 fork-checkout pattern"
+  - section: "Common Patterns"
+    reason: "Usage patterns for pre-agent data prep, concurrency, noise reduction"
+
+sources:
+  # Reference documentation pages — check for content changes
+  # Core reference (high-change frequency)
+  - url: https://github.github.com/gh-aw/reference/triggers/
+    sections: ["Anti-Patterns", "Common Patterns", "Limitations"]
+  - url: https://github.github.com/gh-aw/reference/frontmatter/
+    sections: ["Anti-Patterns", "Architecture", "Additional Frontmatter Features"]
+  - url: https://github.github.com/gh-aw/reference/safe-outputs/
+    sections: ["Anti-Patterns", "Safe Outputs Quick Reference"]
+  - url: https://github.github.com/gh-aw/reference/safe-outputs-pull-requests/
+    sections: ["Safe Outputs Quick Reference"]
+  - url: https://github.github.com/gh-aw/reference/integrity/
+    sections: ["Security Boundaries"]
+  - url: https://github.github.com/gh-aw/reference/custom-safe-outputs/
+    sections: ["Anti-Patterns", "Safe Outputs Quick Reference"]
+  - url: https://github.github.com/gh-aw/reference/triggering-ci/
+    sections: ["Limitations", "Troubleshooting"]
+  - url: https://github.github.com/gh-aw/reference/command-triggers/
+    sections: ["Anti-Patterns"]
+
+  # Extended reference (lower change frequency, but contain important context)
+  - url: https://github.github.com/gh-aw/reference/engines/
+    sections: ["Additional Frontmatter Features"]
+  - url: https://github.github.com/gh-aw/reference/network/
+    sections: ["Security Boundaries"]
+  - url: https://github.github.com/gh-aw/reference/github-tools/
+    sections: ["Security Boundaries"]
+  - url: https://github.github.com/gh-aw/reference/imports/
+    sections: ["Common Patterns"]
+  - url: https://github.github.com/gh-aw/reference/workflow-structure/
+    sections: ["Architecture"]
+
+  # Patterns (best practices that inform the anti-patterns table)
+  - url: https://github.github.com/gh-aw/patterns/trial-ops/
+    sections: ["Common Patterns"]
+  - url: https://github.github.com/gh-aw/patterns/chat-ops/
+    sections: ["Common Patterns", "Anti-Patterns"]
+  - url: https://github.github.com/gh-aw/patterns/label-ops/
+    sections: ["Common Patterns"]
+
+  # Tracked GitHub issues — check open/closed state.
+  # resolution_expected: true means the issue is already incorporated into the
+  # guide and the scraper expects it to stay closed.
+  - issue: github/gh-aw#18481
+    resolution_expected: true
+  - issue: github/gh-aw#18518
+    resolution_expected: true
+  - issue: github/gh-aw#18521
+    resolution_expected: true
+  - issue: github/gh-aw#23769
+    resolution_expected: true
+  - issue: github/gh-aw#25439
+    resolution_expected: true
+
+  # GitHub releases — check for new stable versions
+  - releases: github/gh-aw
+    last_reviewed_release: v0.72.1
+
+style: |
+  Match existing section structure. Use tables for feature comparisons.
+  Include code examples for common patterns. Mark items as anti-patterns
+  when a manual reimplementation should use a built-in feature instead.
+  Keep security guidance precise — never simplify away nuance.
