@@ -18,7 +18,13 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
 
-### Fixed in v0.72.1
+### Fixed in v0.74.4
+- **Submodule credential leak** — Compiled lock files using `persist-credentials: false` on checkout steps failed to scrub credentials when submodules were present. New `checkout.clean-git-credentials: true` option explicitly removes git credentials post-checkout. Workflows with submodules should add this option and recompile.
+- **`add_comment` allowed-mentions ignored** — The `allowed-mentions` config was not being passed through to the safe-outputs layer, causing all mentions to be escaped. Now correctly applied.
+- **`update_pull_request.update_branch` hard failure** — Workflow-permission errors from branch-update calls previously failed the job. Now treated as warnings; the branch-update step is skipped gracefully.
+- **`create_pull_request` spurious chaos fallback** — A branch-already-exists condition was incorrectly triggering the chaos fallback path. Now handled correctly.
+- **Repo-memory `MaxFileSize` raised** — Default raised from 10 KB to 100 KB, unblocking repo-memory analysis of real-world source files. No configuration change needed; recompile to pick up the new default.
+- **Automatic `pull-requests: read` inference** — The compiler now infers `pull-requests: read` for activation jobs that include Vale pre-steps using `gh pr diff`. Recompile affected workflows to pick up the inferred permission automatically.
 - **`&&` expression corruption** — Compiler HTML-escaped `&&` to `\u0026\u0026` inside `${{ }}` expressions in AWF config JSON, breaking workflow parsing.
 - **safe-outputs permission regression** — When `update-project` appeared alongside `add-comment`/`add-labels`, the minted App token was incorrectly downgraded to `issues:read` instead of `issues:write`.
 - **Conclusion comment false success** — The `conclusion` job reported ✅ even when `safe_outputs` failed (e.g., 422 on PR review submission).

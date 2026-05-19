@@ -487,6 +487,8 @@ on:
 
 **`merge-pull-request` safe output** — Merge a PR directly as a safe output. Executes in the safe-outputs job with proper write permissions, not inside the agent container.
 
+**Automatic `pull-requests: read` permission inference** — The compiler now automatically infers `pull-requests: read` for activation jobs that include Vale pre-steps using `gh pr diff`. Previously this required a manual `permissions:` block; workflows using Vale will pick it up on recompile.
+
 **`tools.github.mode: gh-proxy`** — Configure the GitHub CLI proxy feature. The deprecated `cli-proxy` feature flag is scheduled for removal; migrate to this form:
 
 ```yaml
@@ -547,6 +549,15 @@ Standard `[bot]`-authored comments are auto-detected and bypass the confused-dep
 **`checks` MCP tool** — `checks` is available as a first-class MCP tool in the gh-aw MCP server, alongside `pull_requests`, `repos`, `issues`, etc.
 
 **`checkout: false`** — Skip the default repository checkout when the workflow doesn't need source code (e.g., ChatOps commands that only call APIs via `web-fetch`). Saves ~10-30s of runner time.
+
+**`checkout.clean-git-credentials`** — Remove cached git credentials from the workspace after checkout, preventing credential leaks when subsequent steps or build tools use submodules. Required for repositories where `persist-credentials: false` alone was insufficient (e.g., compiled lock files that use submodule checkout patterns):
+
+```yaml
+checkout:
+  clean-git-credentials: true   # Scrub git credentials post-checkout; required for submodule-using workflows
+```
+
+> ⚠️ **Submodule credential leak (pre-v0.74.4):** Compiled lock files previously used `persist-credentials: false` on checkout steps, but this setting was not respected when submodules were present, allowing credentials to persist in the git config. `clean-git-credentials: true` resolves this by explicitly scrubbing credentials after checkout.
 
 **`engine.max-turns`** — Limit the number of turns the agent can take. Set in the engine block: `engine: { id: copilot, max-turns: 15 }`. Preserved through shared imports.
 
