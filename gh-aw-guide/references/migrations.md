@@ -1,0 +1,40 @@
+# gh-aw Migrations & Version History
+
+Reference for migrating deprecated patterns and version-specific bug history. Only consult this file when editing an older workflow or debugging version-specific weirdness.
+
+## Deprecated Patterns → Current Replacements
+
+| If you see this (old) | Replace with (new) | Migration command |
+|---|---|---|
+| `network.firewall:` in frontmatter | Remove entirely | `gh aw fix --write` |
+| `add-comment.discussion: true` (singular) | `discussions: true` | `gh aw fix --write` |
+| `features.inline-agents: true` | Remove (now default-on) | `gh aw fix --write` |
+| `cli-proxy` feature flag | `tools.github.mode: gh-proxy` | Manual edit |
+| `.mcp.json` at repo root | `.github/mcp.json` | Move file manually |
+| `disable-xpia-prompt` in frontmatter | Remove (rejected in strict mode) | Manual edit |
+| `--safe-update` CLI flag | `--approve` | Update scripts/docs |
+
+## Version-Specific Bug History
+
+These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
+
+### Fixed in v0.72.1
+- **`&&` expression corruption** — Compiler HTML-escaped `&&` to `\u0026\u0026` inside `${{ }}` expressions in AWF config JSON, breaking workflow parsing.
+- **safe-outputs permission regression** — When `update-project` appeared alongside `add-comment`/`add-labels`, the minted App token was incorrectly downgraded to `issues:read` instead of `issues:write`.
+- **Conclusion comment false success** — The `conclusion` job reported ✅ even when `safe_outputs` failed (e.g., 422 on PR review submission).
+- **COPILOT_API_KEY over-billing** — The dummy `byok-key` placeholder was causing 10–100x premium request over-billing.
+- **Firewall binary 404** — v0.71.x referenced a non-existent `gh-aw-firewall` version. v0.72.1 ships firewall v0.25.29.
+
+### Fixed in v0.71.5
+- **Claude engine crash** — `CLAUDE_CODE_DISABLE_FAST_MODE=1` now set automatically (Claude Code 2.1.120+ compatibility).
+- **`engine.env` multi-line values** — Block-scalar `engine.env` values (written with `>-`) now compile correctly.
+- **`engine.env` `needs` expressions** — Custom job references in `engine.env` values now wired into agent job `needs` list.
+- **`gh aw upgrade` false BYOK warning** — No longer strips `COPILOT_PROVIDER_API_KEY`/`COPILOT_PROVIDER_BEARER_TOKEN`.
+- **Confused-deputy false positive** — Auto-detects `[bot]`-authored comments and skips the guard.
+
+### Fixed in v0.68.3
+- **Model-not-supported detection** — Workflows stop retrying and surface a clear error instead of spinning indefinitely.
+- **`engine.max-turns` in shared imports** — Now correctly preserved through import chain.
+
+### Historical (v0.62.2)
+- **`min-integrity` compiler bug** — Hardcoded `min-integrity` emitted an incomplete guard policy (missing `repos` field) that crashed the MCP Gateway. Fixed in later versions — verify your lock file includes `determine-automatic-lockdown`.
