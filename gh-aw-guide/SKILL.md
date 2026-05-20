@@ -150,7 +150,7 @@ safe-outputs:
 > | `resolve-pull-request-review-thread` | threads | 10 |
 > | `upload-asset` | assets | 10 |
 > | `autofix-code-scanning-alert` | autofixes | 10 |
-> | `dispatch-workflow` | dispatches (calls) | 3 |
+> | `dispatch-workflow` | dispatches (calls) | 1 |
 > | `set-issue-type` / `set-issue-field` | operations | 5 |
 > | `update-project` | operations | 10 |
 > | `close-pull-request` | closures | 10 |
