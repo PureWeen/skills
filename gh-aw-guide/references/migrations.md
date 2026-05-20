@@ -25,6 +25,8 @@ These are bugs that were fixed. If you encounter them, upgrade to the version in
 - **`create_pull_request` spurious chaos fallback** — A branch-already-exists condition was incorrectly triggering the chaos fallback path. Now handled correctly.
 - **Repo-memory `MaxFileSize` raised** — Default raised from 10 KB to 100 KB, unblocking repo-memory analysis of real-world source files. No configuration change needed; recompile to pick up the new default.
 - **Automatic `pull-requests: read` inference** — The compiler now infers `pull-requests: read` for activation jobs that include Vale pre-steps using `gh pr diff`. Recompile affected workflows to pick up the inferred permission automatically.
+
+### Fixed in v0.72.1
 - **`&&` expression corruption** — Compiler HTML-escaped `&&` to `\u0026\u0026` inside `${{ }}` expressions in AWF config JSON, breaking workflow parsing.
 - **safe-outputs permission regression** — When `update-project` appeared alongside `add-comment`/`add-labels`, the minted App token was incorrectly downgraded to `issues:read` instead of `issues:write`.
 - **Conclusion comment false success** — The `conclusion` job reported ✅ even when `safe_outputs` failed (e.g., 422 on PR review submission).
