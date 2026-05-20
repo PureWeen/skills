@@ -142,15 +142,24 @@ Do **not** create a PR. Stop after calling `noop`.
 
 ## Step 2 — Build a checklist from release notes
 
-Read **every** release note above and build a complete change list. For each
-item, classify:
+Read **every** release note above and build a complete change list.
+
+> **🔍 Scan ALL sections of each release note — not just the curated highlights.**
+> Release notes have multiple sections, and author-visible items routinely live in the long-tail PR list:
+> - **`✨ What's New`** — curated headline features (always scan)
+> - **`🐛 Bug Fixes & Improvements`** — curated bug fixes (always scan)
+> - **`Breaking Changes`** — must always be documented
+> - **`## What's Changed`** (the full PR list at the bottom) — **also scan this**. PR titles like "fix: surface X guidance", "Add Y codemod", "Preserve Z in W filtering", or "Make E### error actionable" frequently describe author-visible behavior that the curated sections summarize away or omit entirely. Author-visible heuristic: does the PR title reference a config option, an error code, a trigger, a safe-output, or a compile-time transformation? If yes, evaluate it as a candidate P2 item.
+> - **`### Community Contributions`** — issue links here describe the user-reported problem each PR resolves. Use them to understand the user-facing impact when a PR title is terse.
+
+For each item, classify:
 
 - **P0** — factually wrong in the current guide (must fix)
 - **P1** — security-relevant change (must fix)
 - **P2** — new feature, new safe output, new config option, new trigger
   behavior, or workflow-author-visible bug fix (must implement)
 - **P3** — internal/cosmetic only (OTLP traces, CI pipeline changes, internal
-  refactors). Skip these, but list them in the PR body.
+  refactors, linters, dev tooling). Skip these, but list them in the PR body.
 
 You must implement every P0/P1/P2 item.
 
@@ -185,15 +194,34 @@ Where to put each kind of change:
   only place version numbers should appear)
 - **Workflow-author bug fix** → relevant section + Known Issues if applicable
 
+> **🛑 `references/migrations.md` section-header rule (DO NOT VIOLATE).**
+> The `## Version-Specific Bug History` block contains one `### Fixed in vX.Y.Z` heading per release. Each heading is a **permanent** record of bugs shipped in that specific version. When adding new fixes for release vN.N.N:
+>
+> - **ALWAYS add a new `### Fixed in vN.N.N` heading above the existing `### Fixed in v(N-1).x.x` heading.**
+> - **NEVER rename, edit, or merge into an existing `### Fixed in …` heading** — doing so retroactively misattributes the prior release's fixes to the new version, corrupting version history.
+> - The same rule applies to any other section-by-release table in the guide (e.g., closed-issues tables).
+
 ## Step 5 — Update the sync manifest
 
 In `gh-aw-guide/sync.yaml`, update `last_reviewed_release` to the newest stable
 tag you incorporated. Add any new tracked URLs or issues that surfaced during
 the scrape.
 
-## Step 6 — Verify completeness
+## Step 6 — Verify completeness and verify facts
 
 Re-read your checklist. Every P0/P1/P2 item must be addressed.
+
+> **🧪 Verify factual claims against upstream sources BEFORE finalizing.**
+> Release notes describe behavior changes but rarely state exact default values, full option lists, or precise config syntax. When the changes you wrote include any of the following, cross-check against the upstream reference docs (use the web-fetch tool — `gh` is not authenticated inside the agent sandbox):
+>
+> | Claim type | Cross-check against |
+> |---|---|
+> | Numeric defaults (e.g., `max:`, `max-uploads:`, `retention-days:`) | `https://raw.githubusercontent.com/github/gh-aw/main/docs/src/content/docs/reference/safe-outputs.md` |
+> | New config option names + accepted values | The corresponding `docs/src/content/docs/reference/*.md` file |
+> | Version-attribution bullets in `migrations.md` | The actual release notes for that exact tag (`gh api repos/github/gh-aw/releases/tags/vX.Y.Z --jq '.body'` — already in the staleness JSON) |
+> | "Available engines: …" list, safe-output enumeration, trigger list | Reference docs |
+>
+> If any default value or option name you wrote cannot be confirmed from upstream sources, **do not include the unverified claim** — describe the behavior change without the specific number and add a `<!-- TODO: verify default -->` HTML comment so the reviewer knows.
 
 Rules:
 

@@ -53,10 +53,13 @@ For each new stable release found in Step 1, fetch the **full** release notes:
 gh api "repos/github/gh-aw/releases/tags/vX.Y.Z" --jq '.body'
 ```
 
-**This is the authoritative source — NOT the commit scanner.** Read every bullet under:
-- "✨ What's New" — each bullet is a feature to document
-- "🐛 Bug Fixes & Improvements" — each bullet may be a fix worth documenting
-- "Breaking Changes" — each must be documented
+**This is the authoritative source — NOT the commit scanner.** Scan **every** section of the release note, not only the curated highlights:
+
+- **`## 🌟 Release Highlights` / `### ✨ What's New`** — curated headline features (always scan)
+- **`### 🐛 Bug Fixes & Improvements`** — curated bug fixes (always scan)
+- **`### Breaking Changes`** / `### 📚 Documentation` — always document breaking changes; documentation-only PRs usually safe to skip
+- **`## What's Changed`** (the flat PR list at the bottom) — **also scan this**. PR titles like "fix: surface X guidance", "Add Y codemod", "Preserve Z in W filtering", or "Make E### error actionable" frequently describe author-visible behavior that the curated headlines summarize away or omit entirely. Author-visible heuristic: does the PR title reference a config option, an error code, a trigger, a safe-output, or a compile-time transformation? If yes, evaluate it as a candidate item.
+- **`### Community Contributions`** — issue links here describe the user-reported problem each PR resolves. Use them to understand the user-facing impact when a PR title is terse.
 
 **For every bullet, check:** Is this already in `~/.agents/skills/gh-aw-guide/SKILL.md`? If not, add it.
 
@@ -87,6 +90,7 @@ Using the release notes from Step 2, update:
 |------|---------------|
 | `~/.agents/skills/gh-aw-guide/SKILL.md` | Version baseline, features, anti-patterns, safe-output types, trigger types |
 | `~/.agents/skills/gh-aw-guide/references/architecture.md` | Execution model, security boundaries, new platform capabilities |
+| `~/.agents/skills/gh-aw-guide/references/migrations.md` | Version-specific bug history (always add new `### Fixed in vX.Y.Z` section, never edit existing) |
 | `.github/instructions/gh-aw-workflows.sync.yaml` | Add new tracked URLs/issues, update `last_reviewed_release` |
 
 **Update rules:**
@@ -95,6 +99,25 @@ Using the release notes from Step 2, update:
 - **Do NOT bump a version baseline** — the guide says "Assumes latest stable", not a specific version number
 - **Do NOT add version tags to features** — the guide documents current behavior, not version history. New features are added without `(vX.Y.Z+)` annotations. Version-specific details go in `references/migrations.md` only.
 - **Update `last_reviewed_release`** in the sync manifest
+
+> **🛑 `references/migrations.md` section-header rule (DO NOT VIOLATE).**
+> The `## Version-Specific Bug History` block contains one `### Fixed in vX.Y.Z` heading per release. Each heading is a **permanent** record of bugs shipped in that specific version. When adding new fixes for release vN.N.N:
+>
+> - **ALWAYS add a new `### Fixed in vN.N.N` heading above the existing `### Fixed in v(N-1).x.x` heading.**
+> - **NEVER rename, edit, or merge into an existing `### Fixed in …` heading** — doing so retroactively misattributes the prior release's fixes to the new version, corrupting version history.
+> - The same rule applies to any other section-by-release table in the guide (e.g., closed-issues tables in `architecture.md`).
+
+> **🧪 Verify factual claims against upstream sources BEFORE finalizing.**
+> Release notes describe behavior changes but rarely state exact default values, full option lists, or precise config syntax. When the changes you wrote include numeric defaults, new config option names, or version-attribution bullets, cross-check against the upstream reference docs:
+>
+> | Claim type | Cross-check against |
+> |---|---|
+> | Numeric defaults (`max:`, `max-uploads:`, `retention-days:`) | `https://raw.githubusercontent.com/github/gh-aw/main/docs/src/content/docs/reference/safe-outputs.md` |
+> | New config option names + accepted values | The corresponding `docs/src/content/docs/reference/*.md` file |
+> | Version-attribution bullets in `migrations.md` | The actual release notes for that exact tag (`gh api repos/github/gh-aw/releases/tags/vX.Y.Z --jq '.body'`) |
+> | "Available engines: …" list, safe-output enumeration, trigger list | Reference docs |
+>
+> If any default value or option name you wrote cannot be confirmed from upstream sources, **do not include the unverified claim** — describe the behavior change without the specific number and add a `<!-- TODO: verify default -->` HTML comment so the reviewer knows.
 
 ### Step 5: Verify
 
