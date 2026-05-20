@@ -260,19 +260,30 @@ steps:
       GH_TOKEN: ${{ github.token }}
       PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
     run: |
-      # 1. Verify PR author has write access, reject forks
+      # 1. Reject cross-repository (fork) PRs — author-permission alone is not enough,
+      #    a write-access employee can still open a fork PR with modified .github/ contents
+      IS_FORK=$(gh pr view "$PR_NUMBER" --json isCrossRepository --jq '.isCrossRepository')
+      if [[ "$IS_FORK" == "true" ]]; then
+        echo "::error::Fork PRs are not supported in this workflow"
+        exit 1
+      fi
+      # 2. Verify PR author has write access
       AUTHOR=$(gh pr view "$PR_NUMBER" --json author --jq '.author.login')
       PERM=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$AUTHOR/permission" --jq '.permission')
       if [[ "$PERM" != "admin" && "$PERM" != "write" && "$PERM" != "maintain" ]]; then
         echo "::error::PR author $AUTHOR has $PERM access — requires write+"
         exit 1
       fi
-      # 2. Capture base branch SHA before checkout
+      # 3. Capture base branch SHA before checkout
       BASE_SHA=$(gh pr view "$PR_NUMBER" --json baseRefOid --jq '.baseRefOid')
-      # 3. Check out the PR branch
+      # 4. Check out the PR branch
       gh pr checkout "$PR_NUMBER"
-      # 4. Restore trusted agent infrastructure from base branch
-      git checkout "$BASE_SHA" -- .github/ .agents/ 2>/dev/null || true
+      # 5. Restore trusted .github/ from base branch — MUST succeed (no `|| true`)
+      #    Shallow clones may not have $BASE_SHA locally; fetch it first.
+      git fetch origin "$BASE_SHA" --depth=1
+      git checkout "$BASE_SHA" -- .github/
+      # .agents/ may not exist at base SHA — guard separately to avoid masking the .github/ failure
+      git checkout "$BASE_SHA" -- .agents/ 2>/dev/null || true
 ```
 
 **Behavior by trigger:**

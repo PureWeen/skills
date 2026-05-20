@@ -190,11 +190,13 @@ concurrency:
   group: "my-workflow-${{ github.event.issue.number || github.event.pull_request.number || inputs.pr_number || github.run_id }}"
   cancel-in-progress: false
 
-# For schedule/workflow_dispatch only — safe to cancel
+# For schedule/workflow_dispatch — include PR number when present
 concurrency:
-  group: "my-workflow-${{ github.ref || github.run_id }}"
+  group: "my-workflow-${{ inputs.pr_number || github.ref || github.run_id }}"
   cancel-in-progress: true
 ```
+
+> ⚠️ **`workflow_dispatch` concurrency footgun.** If your workflow accepts an `inputs.pr_number` input, **include it in the concurrency group** — otherwise `github.ref` alone (typically `refs/heads/main` for every dispatch) puts all simultaneous PR-targeted dispatches into the same group, and `cancel-in-progress: true` will silently cancel a maintainer's in-flight `/review` of PR #100 when another maintainer dispatches against PR #200 seconds later. The example above isolates per-PR.
 
 > ⚠️ **Pre-cancellation race**: Cancellation is asynchronous — GitHub sends `SIGTERM`, waits up to 7500ms, then `SIGKILL`. Already-running steps may complete. An agent that already posted a comment cannot un-post it. A `create-pull-request` that already ran cannot un-create the PR. **Concurrency is not a substitute for idempotency.**
 
@@ -463,7 +465,7 @@ Choose the right trigger for your workflow. Triggers are grouped by recommended 
 | `workflow_dispatch` | Manual escape hatch, debugging, ad-hoc runs | Write+ required; auto-paired with most triggers. ⚠️ Branch selection is user-controlled — a write user can dispatch against a stale branch with weaker `permissions:`, different `safe-outputs:`, or a friendlier prompt |
 | `schedule` | Periodic housekeeping, polling-based PR operations | Best concurrency story; no event spamming; no approval gate |
 | `labeled` / `label_command:` | Human-in-the-loop gate via label application | Triage+ required to apply label; one-shot with auto-remove. Consider `min-integrity: none` only when labels can be applied exclusively by write+ users — the label gate controls *who triggers*, but integrity controls *what content the agent sees*. Verify label permissions before relaxing integrity filtering |
-| `issues` | Community-facing issue workflows | Immediate; `roles: all` acceptable with tight safe-outputs |
+| `issues` | Community-facing issue workflows | Immediate; `roles: all` acceptable **only with read-reply safe-outputs** (`add-comment`, `add-labels` with `allowed:`, `update-issue`, `close-issue`). **Never** pair `roles: all` with `dispatch-workflow`, `create-pull-request`, `push-to-pull-request-branch`, `create-agent-session`, `merge-pull-request`, or any output that creates persistent artifacts or triggers downstream pipelines |
 | `release` / `milestone` | Post-release/milestone automation | Trusted trigger (write+) |
 
 ### ⚠️ Use with Caution
@@ -625,6 +627,34 @@ checkout:
 **MCP config location:** `.github/mcp.json` (previously `.mcp.json` at repo root). Migrate existing configs manually.
 
 **`vulnerability-alerts` permission** — Available as a `GITHUB_TOKEN` permission scope for workflows that need to read security alerts.
+
+### Safe-Outputs You May Not Know About
+
+The official safe-outputs reference covers 30+ output types — the ones below are commonly missed even though they materially change workflow design:
+
+- **`set-issue-type:` / `set-issue-field:`** — Set GitHub Issues type or any single field by name/value (default `max: 5`). Useful for triage workflows that classify issues without using labels.
+- **`upload-artifact:`** — Upload files as run-scoped GitHub Actions artifacts (default `max: 1`, configured via `max-uploads:` not `max:`). Prefer over `upload-asset:` (orphan-branch storage) for most cases.
+- **`dispatch_repository:`** *(experimental)* — Trigger `repository_dispatch` events in **external** repositories (cross-repo). Audit carefully: pairing this with `roles: all` lets untrusted triggers reach other repos.
+- **Custom safe-output `jobs:` and `actions:`** — Register your own post-processing jobs as MCP tools (`safe-outputs.jobs:`) or mount any public GitHub Action as an agent-callable tool (`safe-outputs.actions:`). See [Custom Safe Outputs](https://github.github.com/gh-aw/reference/custom-safe-outputs/).
+
+### Issue / Comment Lifecycle Options
+
+- **`create-issue.group-by-day: true`** — Posts subsequent same-day runs as comments on the existing issue created earlier that UTC day, instead of creating duplicate issues. Pairs well with `close-older-issues: true` for daily/weekly report workflows.
+- **`create-issue.deduplicate-by-title:`** — Drop duplicate issues by title match (`true` for exact, integer for Levenshtein edit distance). Eliminates the "agent re-creates the same triage issue every run" pattern.
+- **`messages.append-only-comments: true`** — Disables the default behavior of editing the activation comment with final status; each run posts a fresh comment for an append-only timeline. Useful when audit-trail visibility matters more than UI tidiness.
+- **`add-comment.discussions: false`** — Opts the workflow out of `discussions:write` permission. **Set this when the workflow only comments on issues/PRs** — otherwise the safe-outputs job carries an unnecessary write scope.
+- **`add-comment.allowed-mentions:`** — Permit specific `@team` or `@user` mentions (others are escaped). The author of the parent issue/PR/discussion is auto-preserved.
+
+### Auto-Injected `create-issue` Opt-Out
+
+**🛑 Frequent surprise:** If you omit `safe-outputs:` entirely (or only declare system types `noop` / `missing-tool` / `missing-data`), gh-aw **silently auto-enables `create-issue`** with `max: 1`, the workflow ID as the label, and the workflow ID as the title prefix. The first time an agent run completes with content, an issue gets created. To opt out, declare an explicit `safe-outputs:` block with the outputs you actually want — even an empty block is not sufficient.
+
+```yaml
+# This workflow has NO safe outputs at all — must declare explicitly
+safe-outputs:
+  noop:
+    report-as-issue: false   # Also suppress noop → comment behavior
+```
 
 ### Observability (OTLP)
 
