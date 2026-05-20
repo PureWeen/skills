@@ -129,12 +129,56 @@ Comment bodies, issue titles, and PR descriptions are **user-controlled untruste
 ```yaml
 safe-outputs:
   add-comment:
-    max: 1                      # blast-radius cap, NOT a retry budget
+    max: 1                      # counts comments — 1 comment per run (blast-radius cap)
     hide-older-comments: true
     target: "*"    # Required for workflow_dispatch (no triggering PR context)
 ```
 
-> **`max:` sizing principle**: `max:` is a blast-radius cap — it limits how many operations the agent can perform per type per run. The safe-outputs infrastructure handles API-level retries (HTTP 429/5xx) independently; extra headroom in `max:` doesn't help retries, it only permits buggy duplicate submissions (e.g., an agent hallucinating a second review post). Set `max:` to exactly the number of intentional calls your orchestration instructions require.
+> **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** What `max:` counts varies by safe-output type. Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels, not the call count). Always check the unit before setting it.
+
+> **`max:` unit by safe-output type** (verify in [official docs](https://github.github.com/gh-aw/reference/safe-outputs/)):
+>
+> | Type | What `max:` counts | Default |
+> |---|---|---|
+> | `add-labels` | **labels** (sum across calls) | 3 |
+> | `remove-labels` | labels | 3 |
+> | `add-reviewer` | **reviewers** | 3 |
+> | `hide-comment` | **comments** | 5 |
+> | `add-comment` | comments (≈1 call) | 1 |
+> | `create-pull-request-review-comment` | **inline review comments** | 10 |
+> | `reply-to-pull-request-review-comment` | replies | 10 |
+> | `resolve-pull-request-review-thread` | threads | 10 |
+> | `upload-asset` | assets | 10 |
+> | `autofix-code-scanning-alert` | autofixes | 10 |
+> | `dispatch-workflow` | dispatches (calls) | 3 |
+> | `set-issue-type` / `set-issue-field` | operations | 5 |
+> | `update-project` | operations | 10 |
+> | `close-pull-request` | closures | 10 |
+> | `create-issue` / `update-issue` / `close-issue` | issues / updates / closures | 1 |
+> | `create-pull-request` / `update-pull-request` / `push-to-pull-request-branch` | PRs / updates / pushes | 1 |
+> | `submit-pull-request-review` | reviews | 1 |
+> | `assign-*` / `unassign-*` / `link-sub-issue` | individual ops | 1 |
+> | `create-discussion` / `update-discussion` / `close-discussion` | items | 1 |
+> | `update-release` / `create-project` / `create-project-status-update` | items | 1 |
+> | `upload-artifact` | uses **`max-uploads:`**, not `max:` | 1 |
+> | `create-agent-session` | sessions | 1 |
+> | `call-workflow` | tool invocations | 1 |
+> | `noop` | messages | 1 |
+> | `create-code-scanning-alert` / `missing-tool` / `missing-data` | items | unlimited |
+>
+> **Sizing principle**: `max:` is a blast-radius cap — it limits how many items of each type the agent can produce per run. The safe-outputs infrastructure handles HTTP 429/5xx retries independently; raising `max:` does not help retries, but lowering it below the legitimate item count silently drops items beyond the cap. **For multi-item types (`add-labels`, `add-reviewer`, all PR-review-comment types), do NOT set `max:` lower than the maximum item count any single run might emit — `add-labels: max: 1` on a labeler that emits `area-*` + `platform/*` will drop one of them every time.**
+
+### Add Labels — Security Hardening
+
+`add-labels:` accepts `allowed:` (glob allow-list) and `blocked:` (glob deny-list) — these are infrastructure-level filters that run before the agent's chosen labels are applied. **Always set `allowed:`** when the workflow has `roles: all` or otherwise accepts untrusted triggers, otherwise a prompt-injected agent can apply any label in the repo (including labels that trigger downstream automation like `approved-for-merge`, `needs-backport`, or `label_command:` triggers).
+
+```yaml
+safe-outputs:
+  add-labels:
+    max: 3                                # counts LABELS, not calls — see table above
+    allowed: [area-*, platform/*, t/*]    # restrict to expected label families
+    blocked: ["~*", "*[bot]"]             # deny patterns regardless of allowed
+```
 
 ### Concurrency
 
@@ -310,7 +354,9 @@ safe-outputs:
 | `none` | All content including `FIRST_TIMER` and users with no association |
 | `blocked` | Users in `blocked-users` — always denied, cannot be promoted |
 
-**Defaults:** Public repos default to `min-integrity: approved` when unconfigured. Private repos default to `min-integrity: none`.
+**Defaults:** When `min-integrity` is omitted, the runtime's `determine-automatic-lockdown` step computes the level per event/actor/repo (see [`references/architecture.md`](references/architecture.md)). As a rough heuristic, public repos tend to land on `approved` and private repos on `none`, but this is **not a static guarantee** — always set it explicitly for security-sensitive workflows.
+
+> ⚠️ **Private repos default to a permissive level.** "It's private so it's trusted" is a frequent misread — automatic lockdown on a private repo can resolve to `none`, allowing the agent to see content from any user with repo access (including read-only contractors and external collaborators). For private workflows with write-capable safe-outputs, **always set `min-integrity: approved` explicitly.**
 
 ```yaml
 tools:
@@ -559,7 +605,7 @@ checkout:
 
 > ⚠️ **Submodule credential leak (pre-v0.74.4):** Compiled lock files previously used `persist-credentials: false` on checkout steps, but this setting was not respected when submodules were present, allowing credentials to persist in the git config. `clean-git-credentials: true` resolves this by explicitly scrubbing credentials after checkout.
 
-**`engine.max-turns`** — Limit the number of turns the agent can take. Set in the engine block: `engine: { id: copilot, max-turns: 15 }`. Preserved through shared imports.
+**`engine.max-turns`** — Limit the number of turns the agent can take. Set in the engine block: `engine: { id: claude, max-turns: 15 }`. Preserved through shared imports. **Supported on Claude only** — the Copilot engine uses `max-continuations` instead; other engines do not support a turn cap (see Engine feature comparison below).
 
 **Available engines:** `copilot` (default), `claude`, `codex`, `gemini`, `crush` (experimental), `opencode` (experimental). See [Engines reference](https://github.github.com/gh-aw/reference/engines/).
 
