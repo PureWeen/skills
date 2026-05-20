@@ -260,19 +260,30 @@ steps:
       GH_TOKEN: ${{ github.token }}
       PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
     run: |
-      # 1. Verify PR author has write access, reject forks
+      # 1. Reject cross-repository (fork) PRs — author-permission alone is not enough,
+      #    a write-access employee can still open a fork PR with modified .github/ contents
+      IS_FORK=$(gh pr view "$PR_NUMBER" --json isCrossRepository --jq '.isCrossRepository')
+      if [[ "$IS_FORK" == "true" ]]; then
+        echo "::error::Fork PRs are not supported in this workflow"
+        exit 1
+      fi
+      # 2. Verify PR author has write access
       AUTHOR=$(gh pr view "$PR_NUMBER" --json author --jq '.author.login')
       PERM=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$AUTHOR/permission" --jq '.permission')
       if [[ "$PERM" != "admin" && "$PERM" != "write" && "$PERM" != "maintain" ]]; then
         echo "::error::PR author $AUTHOR has $PERM access — requires write+"
         exit 1
       fi
-      # 2. Capture base branch SHA before checkout
+      # 3. Capture base branch SHA before checkout
       BASE_SHA=$(gh pr view "$PR_NUMBER" --json baseRefOid --jq '.baseRefOid')
-      # 3. Check out the PR branch
+      # 4. Check out the PR branch
       gh pr checkout "$PR_NUMBER"
-      # 4. Restore trusted agent infrastructure from base branch
-      git checkout "$BASE_SHA" -- .github/ .agents/ 2>/dev/null || true
+      # 5. Restore trusted .github/ from base branch — MUST succeed (no `|| true`)
+      #    Shallow clones may not have $BASE_SHA locally; fetch it first.
+      git fetch origin "$BASE_SHA" --depth=1
+      git checkout "$BASE_SHA" -- .github/
+      # .agents/ may not exist at base SHA — guard separately to avoid masking the .github/ failure
+      git checkout "$BASE_SHA" -- .agents/ 2>/dev/null || true
 ```
 
 **Behavior by trigger:**
@@ -345,6 +356,7 @@ Safe outputs enforce security through separation: agents run read-only and reque
 - `hide-older-comments: true` — Collapse previous comments from same workflow
 - `max: N` — Limit comments per run (default: 1)
 - `target: "*"` — Required for `workflow_dispatch` (no triggering PR context)
+- `allowed-mentions: ["@team"]` — Permit specific @-mentions in the comment body (others are escaped). Correctly applied as of v0.74.4 (previously the config was not passed through, causing all mentions to be escaped). **`@copilot` is auto-preserved** even when not listed here (v0.74.4+) — useful for review workflows that prefix `@copilot ` to trigger follow-up.
 - **PR review thread routing** (v0.70.0+): On `pull_request_review_comment` triggers, `add_comment` now replies directly in the review thread instead of posting at the PR level.
 
 ---
@@ -366,6 +378,9 @@ Safe outputs enforce security through separation: agents run read-only and reque
 | `list_commits` on feature branch filters own commits | Own commits incorrectly excluded when listing commits on a feature branch | Fixed in v0.70.0 |
 | `allowed-base-branches` compile validation | `gh aw compile` incorrectly reported `safe-outputs.create-pull-request.allowed-base-branches` as unknown field | Fixed in v0.70.0 |
 | `update-project` missing permissions | The safe output lacked `issues: read` when using a GitHub App token | Fixed in v0.70.0 — recompile affected workflows |
+| `create-pull-request` file-count cap (`max-patch-files`) | PRs touching more files than the cap fail with E003 | Set `safe-outputs.max-patch-files: N` to raise the cap. v0.74.4+ surfaces the cap value in the E003 message itself — older versions emitted a generic "too many files" error |
+| `update_pull_request.update_branch` permission errors | Workflow-permission errors from branch-update calls previously caused hard failures | Now treated as warnings (non-fatal) — the branch-update attempt is skipped rather than failing the job |
+| Repo-memory limited to small files | Default `MaxFileSize` was 10 KB, blocking analysis of real source files | Raised to 100 KB in v0.74.4 — no configuration change needed; benefit is automatic on recompile |
 
 ---
 
@@ -401,3 +416,4 @@ These issues are now **all closed** — documented here for historical context:
 | Hundreds of "skipped" runs per day | `slash_command:` default subscribes to ALL comment events | Narrow `events:` field; accept remaining noise as cost of low-latency invocation |
 | `label_command:` denies triage users | `triage` role not in default `on.roles:` allowlist | Add `roles: [admin, maintainer, write, triage]` |
 | Forked workflows fire unexpectedly in forks | Workflows copied to fork run on routine events inside the fork | Add job-level guard: `if: github.event.repository.fork == false \|\| github.event_name == 'workflow_dispatch'` |
+| Agent failure reason unclear | Denied tool calls previously not surfaced in failure summary | Now surfaced automatically — denied commands appear in the agent failure report with improved actionable prompts (v0.74.4+) |

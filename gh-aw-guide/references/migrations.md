@@ -18,6 +18,17 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
 
+### Fixed in v0.74.4
+- **Submodule credential leak** — Compiled lock files using `persist-credentials: false` on checkout steps failed to scrub credentials when submodules were present. New `checkout.clean-git-credentials: true` option explicitly removes git credentials post-checkout. Workflows with submodules should add this option and recompile.
+- **`add_comment` allowed-mentions ignored** — The `allowed-mentions` config was not being passed through to the safe-outputs layer, causing all mentions to be escaped. Now correctly applied.
+- **`update_pull_request.update_branch` hard failure** — Workflow-permission errors from branch-update calls previously failed the job. Now treated as warnings; the branch-update step is skipped gracefully.
+- **`create_pull_request` spurious chaos fallback** — A branch-already-exists condition was incorrectly triggering the chaos fallback path. Now handled correctly.
+- **Repo-memory `MaxFileSize` raised** — Default raised from 10 KB to 100 KB, unblocking repo-memory analysis of real-world source files. No configuration change needed; recompile to pick up the new default.
+- **Automatic `pull-requests: read` inference** — The compiler now infers `pull-requests: read` for activation jobs that include Vale pre-steps using `gh pr diff`. Recompile affected workflows to pick up the inferred permission automatically.
+- **`@copilot` mention preservation in `add-comment`** — Distinct from the `allowed-mentions` config pass-through fix: `@copilot` is now auto-preserved even when not listed in `allowed-mentions`. Workflows that prefix review summaries with `@copilot ` to trigger Copilot follow-up (e.g., adversarial PR reviewer skills) previously had the mention escaped unless `allowed-mentions` was set explicitly.
+- **`conclusion` job static concurrency** — The `conclusion` job used a static concurrency group that caused random cancellations when running parallel `workflow_dispatch` invocations (e.g., batch dispatch loops or matrix-style triggering). Concurrency is now per-run; parallel dispatches no longer cancel each other.
+- **Auto-hoist `run:` block expressions** — The compiler now automatically hoists `${{ … }}` expressions in `run:` blocks to `env:` bindings (and applies the same transform to `safe_jobs:` step env vars). Previously, run-script guardrails rejected expressions in `run:` and authors had to rewrite manually. No source change needed — recompile and the codemod applies. See SKILL.md "Token injection hardening" for the security rationale.
+
 ### Fixed in v0.72.1
 - **`&&` expression corruption** — Compiler HTML-escaped `&&` to `\u0026\u0026` inside `${{ }}` expressions in AWF config JSON, breaking workflow parsing.
 - **safe-outputs permission regression** — When `update-project` appeared alongside `add-comment`/`add-labels`, the minted App token was incorrectly downgraded to `issues:read` instead of `issues:write`.

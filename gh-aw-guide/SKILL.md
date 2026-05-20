@@ -129,12 +129,56 @@ Comment bodies, issue titles, and PR descriptions are **user-controlled untruste
 ```yaml
 safe-outputs:
   add-comment:
-    max: 1                      # blast-radius cap, NOT a retry budget
+    max: 1                      # counts comments — 1 comment per run (blast-radius cap)
     hide-older-comments: true
     target: "*"    # Required for workflow_dispatch (no triggering PR context)
 ```
 
-> **`max:` sizing principle**: `max:` is a blast-radius cap — it limits how many operations the agent can perform per type per run. The safe-outputs infrastructure handles API-level retries (HTTP 429/5xx) independently; extra headroom in `max:` doesn't help retries, it only permits buggy duplicate submissions (e.g., an agent hallucinating a second review post). Set `max:` to exactly the number of intentional calls your orchestration instructions require.
+> **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** What `max:` counts varies by safe-output type. Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels, not the call count). Always check the unit before setting it.
+
+> **`max:` unit by safe-output type** (verify in [official docs](https://github.github.com/gh-aw/reference/safe-outputs/)):
+>
+> | Type | What `max:` counts | Default |
+> |---|---|---|
+> | `add-labels` | **labels** (sum across calls) | 3 |
+> | `remove-labels` | labels | 3 |
+> | `add-reviewer` | **reviewers** | 3 |
+> | `hide-comment` | **comments** | 5 |
+> | `add-comment` | comments (≈1 call) | 1 |
+> | `create-pull-request-review-comment` | **inline review comments** | 10 |
+> | `reply-to-pull-request-review-comment` | replies | 10 |
+> | `resolve-pull-request-review-thread` | threads | 10 |
+> | `upload-asset` | assets | 10 |
+> | `autofix-code-scanning-alert` | autofixes | 10 |
+> | `dispatch-workflow` | dispatches (calls) | 1 |
+> | `set-issue-type` / `set-issue-field` | operations | 5 |
+> | `update-project` | operations | 10 |
+> | `close-pull-request` | closures | 10 |
+> | `create-issue` / `update-issue` / `close-issue` | issues / updates / closures | 1 |
+> | `create-pull-request` / `update-pull-request` / `push-to-pull-request-branch` | PRs / updates / pushes | 1 |
+> | `submit-pull-request-review` | reviews | 1 |
+> | `assign-*` / `unassign-*` / `link-sub-issue` | individual ops | 1 |
+> | `create-discussion` / `update-discussion` / `close-discussion` | items | 1 |
+> | `update-release` / `create-project` / `create-project-status-update` | items | 1 |
+> | `upload-artifact` | uses **`max-uploads:`**, not `max:` | 1 |
+> | `create-agent-session` | sessions | 1 |
+> | `call-workflow` | tool invocations | 1 |
+> | `noop` | messages | 1 |
+> | `create-code-scanning-alert` / `missing-tool` / `missing-data` | items | unlimited |
+>
+> **Sizing principle**: `max:` is a blast-radius cap — it limits how many items of each type the agent can produce per run. The safe-outputs infrastructure handles HTTP 429/5xx retries independently; raising `max:` does not help retries, but lowering it below the legitimate item count silently drops items beyond the cap. **For multi-item types (`add-labels`, `add-reviewer`, all PR-review-comment types), do NOT set `max:` lower than the maximum item count any single run might emit — `add-labels: max: 1` on a labeler that emits `area-*` + `platform/*` will drop one of them every time.**
+
+### Add Labels — Security Hardening
+
+`add-labels:` accepts `allowed:` (glob allow-list) and `blocked:` (glob deny-list) — these are infrastructure-level filters that run before the agent's chosen labels are applied. **Always set `allowed:`** when the workflow has `roles: all` or otherwise accepts untrusted triggers, otherwise a prompt-injected agent can apply any label in the repo (including labels that trigger downstream automation like `approved-for-merge`, `needs-backport`, or `label_command:` triggers).
+
+```yaml
+safe-outputs:
+  add-labels:
+    max: 3                                # counts LABELS, not calls — see table above
+    allowed: [area-*, platform/*, t/*]    # restrict to expected label families
+    blocked: ["~*", "*[bot]"]             # deny patterns regardless of allowed
+```
 
 ### Concurrency
 
@@ -146,11 +190,13 @@ concurrency:
   group: "my-workflow-${{ github.event.issue.number || github.event.pull_request.number || inputs.pr_number || github.run_id }}"
   cancel-in-progress: false
 
-# For schedule/workflow_dispatch only — safe to cancel
+# For schedule/workflow_dispatch — include PR number when present
 concurrency:
-  group: "my-workflow-${{ github.ref || github.run_id }}"
+  group: "my-workflow-${{ inputs.pr_number || github.ref || github.run_id }}"
   cancel-in-progress: true
 ```
+
+> ⚠️ **`workflow_dispatch` concurrency footgun.** If your workflow accepts an `inputs.pr_number` input, **include it in the concurrency group** — otherwise `github.ref` alone (typically `refs/heads/main` for every dispatch) puts all simultaneous PR-targeted dispatches into the same group, and `cancel-in-progress: true` will silently cancel a maintainer's in-flight `/review` of PR #100 when another maintainer dispatches against PR #200 seconds later. The example above isolates per-PR.
 
 > ⚠️ **Pre-cancellation race**: Cancellation is asynchronous — GitHub sends `SIGTERM`, waits up to 7500ms, then `SIGKILL`. Already-running steps may complete. An agent that already posted a comment cannot un-post it. A `create-pull-request` that already ran cannot un-create the PR. **Concurrency is not a substitute for idempotency.**
 
@@ -310,7 +356,9 @@ safe-outputs:
 | `none` | All content including `FIRST_TIMER` and users with no association |
 | `blocked` | Users in `blocked-users` — always denied, cannot be promoted |
 
-**Defaults:** Public repos default to `min-integrity: approved` when unconfigured. Private repos default to `min-integrity: none`.
+**Defaults:** When `min-integrity` is omitted, the runtime's `determine-automatic-lockdown` step computes the level per event/actor/repo (see [`references/architecture.md`](references/architecture.md)). As a rough heuristic, public repos tend to land on `approved` and private repos on `none`, but this is **not a static guarantee** — always set it explicitly for security-sensitive workflows.
+
+> ⚠️ **Private repos default to a permissive level.** "It's private so it's trusted" is a frequent misread — automatic lockdown on a private repo can resolve to `none`, allowing the agent to see content from any user with repo access (including read-only contractors and external collaborators). For private workflows with write-capable safe-outputs, **always set `min-integrity: approved` explicitly.**
 
 ```yaml
 tools:
@@ -417,7 +465,7 @@ Choose the right trigger for your workflow. Triggers are grouped by recommended 
 | `workflow_dispatch` | Manual escape hatch, debugging, ad-hoc runs | Write+ required; auto-paired with most triggers. ⚠️ Branch selection is user-controlled — a write user can dispatch against a stale branch with weaker `permissions:`, different `safe-outputs:`, or a friendlier prompt |
 | `schedule` | Periodic housekeeping, polling-based PR operations | Best concurrency story; no event spamming; no approval gate |
 | `labeled` / `label_command:` | Human-in-the-loop gate via label application | Triage+ required to apply label; one-shot with auto-remove. Consider `min-integrity: none` only when labels can be applied exclusively by write+ users — the label gate controls *who triggers*, but integrity controls *what content the agent sees*. Verify label permissions before relaxing integrity filtering |
-| `issues` | Community-facing issue workflows | Immediate; `roles: all` acceptable with tight safe-outputs |
+| `issues` | Community-facing issue workflows | Immediate; `roles: all` acceptable **only with read-reply safe-outputs** (`add-comment`, `add-labels` with `allowed:`, `update-issue`, `close-issue`). **Never** pair `roles: all` with `dispatch-workflow`, `create-pull-request`, `push-to-pull-request-branch`, `create-agent-session`, `merge-pull-request`, or any output that creates persistent artifacts or triggers downstream pipelines |
 | `release` / `milestone` | Post-release/milestone automation | Trusted trigger (write+) |
 
 ### ⚠️ Use with Caution
@@ -487,6 +535,8 @@ on:
 
 **`merge-pull-request` safe output** — Merge a PR directly as a safe output. Executes in the safe-outputs job with proper write permissions, not inside the agent container.
 
+**Automatic `pull-requests: read` permission inference** — The compiler now automatically infers `pull-requests: read` for activation jobs that include Vale pre-steps using `gh pr diff`. Previously this required a manual `permissions:` block; workflows using Vale will pick it up on recompile.
+
 **`tools.github.mode: gh-proxy`** — Configure the GitHub CLI proxy feature. The deprecated `cli-proxy` feature flag is scheduled for removal; migrate to this form:
 
 ```yaml
@@ -548,7 +598,16 @@ Standard `[bot]`-authored comments are auto-detected and bypass the confused-dep
 
 **`checkout: false`** — Skip the default repository checkout when the workflow doesn't need source code (e.g., ChatOps commands that only call APIs via `web-fetch`). Saves ~10-30s of runner time.
 
-**`engine.max-turns`** — Limit the number of turns the agent can take. Set in the engine block: `engine: { id: copilot, max-turns: 15 }`. Preserved through shared imports.
+**`checkout.clean-git-credentials`** — Remove cached git credentials from the workspace after checkout, preventing credential leaks when subsequent steps or build tools use submodules. Required for repositories where `persist-credentials: false` alone was insufficient (e.g., compiled lock files that use submodule checkout patterns):
+
+```yaml
+checkout:
+  clean-git-credentials: true   # Scrub git credentials post-checkout; required for submodule-using workflows
+```
+
+> ⚠️ **Submodule credential leak (pre-v0.74.4):** Compiled lock files previously used `persist-credentials: false` on checkout steps, but this setting was not respected when submodules were present, allowing credentials to persist in the git config. `clean-git-credentials: true` resolves this by explicitly scrubbing credentials after checkout.
+
+**`engine.max-turns`** — Limit the number of turns the agent can take. Set in the engine block: `engine: { id: claude, max-turns: 15 }`. Preserved through shared imports. **Supported on Claude only** — the Copilot engine uses `max-continuations` instead; other engines do not support a turn cap (see Engine feature comparison below).
 
 **Available engines:** `copilot` (default), `claude`, `codex`, `gemini`, `crush` (experimental), `opencode` (experimental). See [Engines reference](https://github.github.com/gh-aw/reference/engines/).
 
@@ -569,6 +628,34 @@ Standard `[bot]`-authored comments are auto-detected and bypass the confused-dep
 
 **`vulnerability-alerts` permission** — Available as a `GITHUB_TOKEN` permission scope for workflows that need to read security alerts.
 
+### Safe-Outputs You May Not Know About
+
+The official safe-outputs reference covers 30+ output types — the ones below are commonly missed even though they materially change workflow design:
+
+- **`set-issue-type:` / `set-issue-field:`** — Set GitHub Issues type or any single field by name/value (default `max: 5`). Useful for triage workflows that classify issues without using labels.
+- **`upload-artifact:`** — Upload files as run-scoped GitHub Actions artifacts (default `max: 1`, configured via `max-uploads:` not `max:`). Prefer over `upload-asset:` (orphan-branch storage) for most cases.
+- **`dispatch_repository:`** *(experimental)* — Trigger `repository_dispatch` events in **external** repositories (cross-repo). Audit carefully: pairing this with `roles: all` lets untrusted triggers reach other repos.
+- **Custom safe-output `jobs:` and `actions:`** — Register your own post-processing jobs as MCP tools (`safe-outputs.jobs:`) or mount any public GitHub Action as an agent-callable tool (`safe-outputs.actions:`). See [Custom Safe Outputs](https://github.github.com/gh-aw/reference/custom-safe-outputs/).
+
+### Issue / Comment Lifecycle Options
+
+- **`create-issue.group-by-day: true`** — Posts subsequent same-day runs as comments on the existing issue created earlier that UTC day, instead of creating duplicate issues. Pairs well with `close-older-issues: true` for daily/weekly report workflows.
+- **`create-issue.deduplicate-by-title:`** — Drop duplicate issues by title match (`true` for exact, integer for Levenshtein edit distance). Eliminates the "agent re-creates the same triage issue every run" pattern.
+- **`messages.append-only-comments: true`** — Disables the default behavior of editing the activation comment with final status; each run posts a fresh comment for an append-only timeline. Useful when audit-trail visibility matters more than UI tidiness.
+- **`add-comment.discussions: false`** — Opts the workflow out of `discussions:write` permission. **Set this when the workflow only comments on issues/PRs** — otherwise the safe-outputs job carries an unnecessary write scope.
+- **`add-comment.allowed-mentions:`** — Permit specific `@team` or `@user` mentions (others are escaped). The author of the parent issue/PR/discussion is auto-preserved.
+
+### Auto-Injected `create-issue` Opt-Out
+
+**🛑 Frequent surprise:** If you omit `safe-outputs:` entirely (or only declare system types `noop` / `missing-tool` / `missing-data`), gh-aw **silently auto-enables `create-issue`** with `max: 1`, the workflow ID as the label, and the workflow ID as the title prefix. The first time an agent run completes with content, an issue gets created. To opt out, declare an explicit `safe-outputs:` block with the outputs you actually want — even an empty block is not sufficient.
+
+```yaml
+# This workflow has NO safe outputs at all — must declare explicitly
+safe-outputs:
+  noop:
+    report-as-issue: false   # Also suppress noop → comment behavior
+```
+
 ### Observability (OTLP)
 
 gh-aw supports OpenTelemetry trace export for workflow observability:
@@ -588,6 +675,8 @@ Traces include per-job spans with timing, token usage breakdowns, GitHub API rat
 **NFKC normalization + homoglyph detection** — SafeOutputs infrastructure detects Unicode homoglyph attacks (e.g., Cyrillic characters disguised as Latin) via NFKC normalization, preventing safe-output key spoofing.
 
 **Token injection hardening** — Secrets are injected via `env:` blocks rather than inline `run:` interpolation, reducing exposure to shell injection.
+
+> **v0.74.4+ auto-hoist `${{ … }}` from `run:` to `env:`** — The compiler now automatically rewrites `${{ … }}` expressions inside `run:` blocks (and `safe_jobs:` step env vars) into `env:` bindings as part of compile. Authors no longer need to manually rewrite expressions to clear the run-script guardrail; recompiling an existing workflow picks up the transform automatically.
 
 ### Breaking Changes & Migrations
 
