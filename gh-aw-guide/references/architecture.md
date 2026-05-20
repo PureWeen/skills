@@ -356,7 +356,7 @@ Safe outputs enforce security through separation: agents run read-only and reque
 - `hide-older-comments: true` — Collapse previous comments from same workflow
 - `max: N` — Limit comments per run (default: 1)
 - `target: "*"` — Required for `workflow_dispatch` (no triggering PR context)
-- `allowed-mentions: ["@team"]` — Permit specific @-mentions in the comment body (others are escaped). Correctly applied as of v0.74.4 (previously the config was not passed through, causing all mentions to be escaped).
+- `allowed-mentions: ["@team"]` — Permit specific @-mentions in the comment body (others are escaped). Correctly applied as of v0.74.4 (previously the config was not passed through, causing all mentions to be escaped). **`@copilot` is auto-preserved** even when not listed here (v0.74.4+) — useful for review workflows that prefix `@copilot ` to trigger follow-up.
 - **PR review thread routing** (v0.70.0+): On `pull_request_review_comment` triggers, `add_comment` now replies directly in the review thread instead of posting at the PR level.
 
 ---
@@ -378,6 +378,7 @@ Safe outputs enforce security through separation: agents run read-only and reque
 | `list_commits` on feature branch filters own commits | Own commits incorrectly excluded when listing commits on a feature branch | Fixed in v0.70.0 |
 | `allowed-base-branches` compile validation | `gh aw compile` incorrectly reported `safe-outputs.create-pull-request.allowed-base-branches` as unknown field | Fixed in v0.70.0 |
 | `update-project` missing permissions | The safe output lacked `issues: read` when using a GitHub App token | Fixed in v0.70.0 — recompile affected workflows |
+| `create-pull-request` file-count cap (`max-patch-files`) | PRs touching more files than the cap fail with E003 | Set `safe-outputs.max-patch-files: N` to raise the cap. v0.74.4+ surfaces the cap value in the E003 message itself — older versions emitted a generic "too many files" error |
 | `update_pull_request.update_branch` permission errors | Workflow-permission errors from branch-update calls previously caused hard failures | Now treated as warnings (non-fatal) — the branch-update attempt is skipped rather than failing the job |
 | Repo-memory limited to small files | Default `MaxFileSize` was 10 KB, blocking analysis of real source files | Raised to 100 KB in v0.74.4 — no configuration change needed; benefit is automatic on recompile |
 

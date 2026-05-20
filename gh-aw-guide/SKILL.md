@@ -676,6 +676,8 @@ Traces include per-job spans with timing, token usage breakdowns, GitHub API rat
 
 **Token injection hardening** — Secrets are injected via `env:` blocks rather than inline `run:` interpolation, reducing exposure to shell injection.
 
+> **v0.74.4+ auto-hoist `${{ … }}` from `run:` to `env:`** — The compiler now automatically rewrites `${{ … }}` expressions inside `run:` blocks (and `safe_jobs:` step env vars) into `env:` bindings as part of compile. Authors no longer need to manually rewrite expressions to clear the run-script guardrail; recompiling an existing workflow picks up the transform automatically.
+
 ### Breaking Changes & Migrations
 
 Deprecated frontmatter fields are rejected by the compiler. Run `gh aw fix --write` to auto-fix supported patterns. Some migrations (e.g., `cli-proxy`, `.mcp.json`) require manual edits — see [`references/migrations.md`](references/migrations.md) for the full table and version-specific bug history.
