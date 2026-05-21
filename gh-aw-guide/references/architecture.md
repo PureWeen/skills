@@ -79,7 +79,7 @@ To **allow fork PRs**, add `forks: ["*"]` to the `pull_request` trigger in the `
 
 | Layer | What it does | What it doesn't do |
 |-------|-------------|-------------------|
-| **AWF network firewall** | Restricts outbound to allowlisted domains | Doesn't prevent reading env vars inside the container |
+| **AWF network firewall** | Restricts outbound to allowlisted domains. The `github` ecosystem preset includes `patch-diff.githubusercontent.com`, so `network.allowed: [github]` workflows can fetch PR patch diffs without extra allowlist entries. | Doesn't prevent reading env vars inside the container |
 | **`redact_secrets.cjs`** | Scrubs known secret values from logs/artifacts post-agent | Doesn't catch encoded/obfuscated values |
 | **Threat detection agent** | Reviews agent outputs before safe-outputs publishes them | Can miss novel exfiltration techniques |
 | **Safe-outputs permission separation** | Write operations happen in separate job, not the agent | Agent can still request writes via safe-output tools |

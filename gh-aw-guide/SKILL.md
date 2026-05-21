@@ -537,6 +537,10 @@ on:
 
 **Automatic `pull-requests: read` permission inference** — The compiler now automatically infers `pull-requests: read` for activation jobs that include Vale pre-steps using `gh pr diff`. Previously this required a manual `permissions:` block; workflows using Vale will pick it up on recompile.
 
+**Improved validation error messages** — The compiler now includes two significant DX improvements in error output:
+- **Fuzzy "Did You Mean?" suggestions** — When you mistype an engine name, event, permission scope, or MCP type, the error now includes a `Did you mean: <suggestion>?` hint using Levenshtein distance matching (e.g., `invalid engine: copiliot` → `Did you mean: copilot?`).
+- **`file:line:col:` positioning** — Validation errors include source-file location information so IDE tooling (and `gh aw lint`) can jump directly to the problematic field.
+
 **`tools.github.mode: gh-proxy`** — Configure the GitHub CLI proxy feature. The deprecated `cli-proxy` feature flag is scheduled for removal; migrate to this form:
 
 ```yaml
@@ -609,7 +613,7 @@ checkout:
 
 **`engine.max-turns`** — Limit the number of turns the agent can take. Set in the engine block: `engine: { id: claude, max-turns: 15 }`. Preserved through shared imports. **Supported on Claude only** — the Copilot engine uses `max-continuations` instead; other engines do not support a turn cap (see Engine feature comparison below).
 
-**Available engines:** `copilot` (default), `claude`, `codex`, `gemini`, `crush` (experimental), `opencode` (experimental). See [Engines reference](https://github.github.com/gh-aw/reference/engines/).
+**Available engines:** `copilot` (default), `claude`, `codex`, `gemini`, `crush` (experimental), `opencode` (experimental). See [Engines reference](https://github.github.com/gh-aw/reference/engines/). The `gemini` engine supports the **Gemini 3.5 Flash** model — see the reference docs for configuration details.
 
 **Engine feature comparison:**
 
