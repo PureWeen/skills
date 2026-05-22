@@ -628,6 +628,18 @@ checkout:
 
 **`vulnerability-alerts` permission** — Available as a `GITHUB_TOKEN` permission scope for workflows that need to read security alerts.
 
+**Compiler diagnostic improvements** — The compiler now produces richer error output to help you fix validation failures faster:
+
+- **Fuzzy "Did You Mean?" suggestions** — When you mistype an engine name, event, permission, or MCP type (e.g., `engine: copiliot`), the compiler suggests the closest valid value using Levenshtein distance matching. No manual lookup needed for common typos.
+- **File/line/column context** — Validation errors now include `file:line:col:` positioning (e.g., `workflow.md:14:5: invalid engine: copiliot — Did you mean: copilot?`), allowing IDEs and editors to jump directly to the problem field.
+
+**Reasoning message rendering** — Agent reasoning content is now rendered with a distinct `◯` open circle icon and italic styling, making internal thought processes visible and distinguishable from regular output. Applies to:
+  - Claude extended thinking blocks
+  - Codex `thinking` sections
+  - Copilot `reasoning_text` fields
+
+**`network.allowed: [github]` now includes `patch-diff.githubusercontent.com`** — The `github` network domain ecosystem was expanded to include `patch-diff.githubusercontent.com`. Workflows using `network.allowed: [github]` can now fetch PR diffs (e.g., via `https://patch-diff.githubusercontent.com/raw/...`) without allowlisting the domain manually.
+
 ### Safe-Outputs You May Not Know About
 
 The official safe-outputs reference covers 30+ output types — the ones below are commonly missed even though they materially change workflow design:
