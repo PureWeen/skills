@@ -17,7 +17,7 @@ Scrape upstream `github/gh-aw` documentation, releases, and repo commits to dete
 
 ## Prerequisites
 
-- `gh` CLI authenticated with access to `github/gh-aw` (internal repo)
+- `gh` CLI authenticated with access to `github/gh-aw` (public repo)
 - `pwsh` (PowerShell 7+) installed
 - The sync manifest at `.github/instructions/gh-aw-workflows.sync.yaml` must exist
 
