@@ -547,6 +547,8 @@ tools:
 
 **Claude engine** — The Claude engine has two permission modes: `acceptEdits` (default — agent proposes edits that the safe-outputs layer validates) and `bypassPermissions` (activated when unrestricted bash `bash: "*"` is granted — agent executes directly).
 
+**Reasoning message rendering** — Agent reasoning/thinking content (Claude extended thinking blocks, Codex `thinking` sections, Copilot `reasoning_text`) renders with a distinct `◯` open circle icon and italic styling in the workflow UI. This makes agent thought processes visible and distinguishable from regular output — useful when diagnosing why the agent made a particular decision.
+
 **`engine.bare` frontmatter field** — Disable automatic context loading for supported engines, giving full control over what the AI agent sees. Use `bare: true` with `copilot` (suppresses `AGENTS.md` and user instructions) or `claude` (suppresses `CLAUDE.md` memory files). Also supported by `codex` and `gemini`. Unsupported engines emit a compiler warning.
 
 **`engine.mcp` import support** — `engine.mcp.tool-timeout` and `session-timeout` can be imported from shared workflows. Shared workflows wrapping slow MCP servers can declare these once, and consumers inherit the values automatically. Consumer-declared values take precedence.
@@ -568,6 +570,10 @@ tools:
 **Bundle mode for safe-output patches** — Bundle mode is the default for safe-output patch packaging.
 
 **`gh aw lint`** — Fast lock-file validation using [actionlint](https://github.com/rhysd/actionlint) directly against existing `.lock.yml` files — no recompile needed. Supports `--dir`, explicit file paths, and optional `--shellcheck`/`--pyflakes` checks. Ideal as a lightweight CI gate.
+
+**Fuzzy "Did You Mean?" suggestions in validation errors** — When `gh aw compile` detects a mistyped identifier (engine name, event name, permission scope, or MCP type), the error now includes a suggestion based on Levenshtein distance matching. For example: `invalid engine: copiliot → Did you mean: copilot?`. No action required — this improves the compile-error experience automatically.
+
+**File/line/column context in validation errors** — Validation errors now include `file:line:col:` positioning, enabling IDE tooling to jump directly to the problematic field. Useful when compiling large multi-import workflows where the offending field is not obvious from the error message alone.
 
 **Inline sub-agents** — Sub-agent artifact staging and restoration are automatically emitted in compiled workflows. No feature flag needed.
 

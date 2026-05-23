@@ -90,6 +90,8 @@ To **allow fork PRs**, add `forks: ["*"]` to the `pull_request` trigger in the `
 | **XPIA prompt** | Instructs LLM to resist prompt injection from untrusted content (hardened v0.70.0) | LLM compliance is probabilistic, not guaranteed; `disable-xpia-prompt` rejected at compile in strict mode |
 | **`pre_activation` role check** | Gates on write-access collaborators | Does not apply if `roles: all` is set |
 
+> **`network.allowed: [github]` includes `patch-diff.githubusercontent.com`** — The `github` network preset covers `patch-diff.githubusercontent.com`, so workflows using `network.allowed: [github]` can fetch raw PR diffs (e.g., via `https://patch-diff.githubusercontent.com/raw/…`) without adding extra domain entries. Previously, requests to this host were blocked even when the `github` preset was active.
+
 ### Integrity Filtering
 
 Integrity filtering (`tools.github.min-integrity`) controls which GitHub content an agent can access during a workflow run. The MCP gateway filters content by trust level before the agent sees it.
