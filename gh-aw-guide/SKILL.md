@@ -32,7 +32,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-05-22):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-05-22 against gh-aw v0.74.4):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -98,7 +98,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-05-22 against [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-05-22 against gh-aw v0.74.4 [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -121,7 +121,7 @@ safe-outputs:
 > | `create-agent-session` / `call-workflow` / `noop` | sessions / calls / messages | 1 |
 > | `create-code-scanning-alert` / `missing-tool` / `missing-data` | items | unlimited |
 >
-> **Sizing principle**: `max:` is a blast-radius cap, not a retry budget. The safe-outputs infrastructure handles HTTP 429/5xx retries independently. Raising `max:` doesn't help retries; lowering it below legitimate item count silently drops items. For multi-item types (`add-labels`, `add-reviewer`, all PR-review-comment types), set `max:` to the realistic per-run maximum.
+> **Sizing principle**: `max:` is a blast-radius cap, not a retry budget. The safe-outputs infrastructure handles HTTP 429/5xx retries independently. Raising `max:` doesn't help retries; **lowering it below legitimate item count silently drops items beyond the cap**. For multi-item types (`add-labels`, `add-reviewer`, all PR-review-comment types), set `max:` to the realistic per-run maximum — e.g., `add-labels: max: 1` on a labeler that emits `area-*` + `platform/*` will drop one of them every time.
 
 ### Add Labels — Security Hardening
 
@@ -303,11 +303,27 @@ tools:
     trusted-users: [contractor-1]  # Elevate specific users to 'approved'
     blocked-users: [spam-bot]      # Unconditionally block (always denied)
     approval-labels: [human-reviewed]  # Labels that promote items to 'approved'
+    # integrity-proxy: false       # Disables DIFC proxy for pre-agent gh CLI — use only for non-agentic steps
 ```
 
 **Effective integrity computation order** (highest wins): `blocked-users` → `trusted-users` → `approval-labels` → endorsement/disapproval reactions → author association default.
 
 **Centralized management:** `trusted-users`, `blocked-users`, and `approval-labels` accept GitHub Actions expressions (e.g., `${{ vars.TRUSTED_CONTRACTORS }}`). Organization-wide defaults can be distributed via Actions env vars prefixed `GH_AW_GITHUB_` (e.g., `GH_AW_GITHUB_TRUSTED_USERS`).
+
+**Reaction-based integrity (`features.integrity-reactions: true`)** — Reactions on issues/PRs/comments can dynamically promote or demote integrity. The reactor's own integrity must meet `endorser-min-integrity` for their reaction to count, otherwise an unapproved user could promote themselves with a 👍:
+
+```yaml
+features:
+  integrity-reactions: true
+tools:
+  github:
+    endorsement-reactions: [THUMBS_UP, HEART]       # Promote item to 'approved' (default when feature enabled)
+    disapproval-reactions: [THUMBS_DOWN, CONFUSED]  # Demote item integrity (default when feature enabled)
+    endorser-min-integrity: approved                # Reactor must already be 'approved' for their reaction to count (default: approved)
+    disapproval-integrity: none                     # Integrity level assigned on qualifying disapproval (default: none)
+```
+
+**`integrity-proxy: false`** — Disables the DIFC proxy for pre-agent `gh` CLI calls in workflow steps. Only use when you deliberately want to bypass integrity checks for a non-agentic step. Does NOT affect the MCP gateway filtering.
 
 **Interaction with `roles:`:**
 
@@ -372,7 +388,7 @@ gh-aw provides `lock-for-agent: true` to automatically lock/unlock the issue dur
 | `workflow_dispatch` | Does the workflow assume a specific ref? Branch selection is user-controlled — a write user can dispatch against a stale branch with weaker `permissions:`, different `safe-outputs:`, or a friendlier prompt | Write+ required |
 | `schedule` | Is the cron isolated per workload? | Best concurrency story; no event spamming; no approval gate |
 | `labeled` / `label_command:` | Can a triage user fire something that needs write to be safe? Verify label permissions before relaxing integrity filtering | Triage+ required; one-shot with auto-remove |
-| `issues` | Are safe-outputs limited to read-reply (`add-comment`, `add-labels` with `allowed:`, `update-issue`, `close-issue`)? | `roles: all` acceptable **only** with read-reply outputs. **Never** pair `roles: all` with `dispatch-workflow`, `create-pull-request`, `push-to-pull-request-branch`, `create-agent-session`, `merge-pull-request` |
+| `issues` | Are safe-outputs limited to read-reply (`add-comment`, `add-labels` with `allowed:`, `update-issue`, `close-issue`)? | `roles: all` acceptable **only** with read-reply outputs. **Never** pair `roles: all` with `dispatch-workflow`, `create-pull-request`, `push-to-pull-request-branch`, `create-agent-session`, `merge-pull-request`, or any output that creates persistent artifacts or triggers downstream pipelines |
 | `release` / `milestone` | Trusted trigger; usually safe | Write+ required |
 
 ### ⚠️ Use with Caution
@@ -405,6 +421,8 @@ gh-aw provides `lock-for-agent: true` to automatically lock/unlock the issue dur
 
 1. **Deterministic by default.** Use deterministic Actions and reusable workflows; agentic workflows only when the input is unstructured or AI unlocks a capability deterministic code cannot provide.
 2. **Limitations ARE the security model.** Don't engineer bypasses (`pull_request_target` for write access, PAT pools to evade bot attribution, `workflow_run` to escape approval gates, `roles: all` to widen the actor pool). When a boundary blocks a legitimate goal, escalate to platform owners.
+3. **Limit the agent job to agent-suitable work.** Keep filtering/skipping in pre-agent steps. Execute deterministic scripts before and after the agent job — the agent container should only see the inputs it needs to act on.
+4. **Apply least privilege on every dimension.** Minimum `permissions:`, `safe-outputs:`, `network.allowed:`, secrets, `tools:`. The agent container limits the write surface (prevents process escape) but does not neutralise prompt injection — untrusted input must still be treated as adversarial. **The same operation in pre/post-agent steps runs on the runner host with full secret access**, not inside the sandbox.
 
 ## Frontmatter Features (Selected)
 
@@ -434,9 +452,17 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 - **`add-comment.discussions: false`** — Opts the workflow out of `discussions:write` permission. **Set this when the workflow only comments on issues/PRs** — otherwise the safe-outputs job carries an unnecessary write scope.
 - **`add-comment.allowed-mentions:`** — Permit specific `@team` or `@user` mentions (others are escaped). The author of the parent issue/PR/discussion is auto-preserved.
 
+### Issue / Comment Lifecycle Options (often missed)
+
+- **`create-issue.group-by-day: true`** — Posts subsequent same-day runs as comments on the existing issue created earlier that UTC day, instead of creating duplicate issues. Pairs well with `close-older-issues: true` for daily/weekly report workflows.
+- **`create-issue.deduplicate-by-title:`** — Drop duplicate issues by title match (`true` for exact, integer for Levenshtein edit distance). Eliminates the "agent re-creates the same triage issue every run" pattern.
+- **`messages.append-only-comments: true`** — Disables the default behavior of editing the activation comment with final status; each run posts a fresh comment for an append-only timeline. Useful when audit-trail visibility matters more than UI tidiness.
+
 ## Security Hardening
 
-**Token injection hardening** — Secrets are injected via `env:` blocks rather than inline `run:` interpolation. The compiler now **automatically rewrites `${{ … }}` expressions inside `run:` blocks** into `env:` bindings as part of compile — authors no longer need to manually rewrite expressions to clear the run-script guardrail; recompiling picks up the transform automatically.
+**Token injection hardening** — Secrets are injected via `env:` blocks rather than inline `run:` interpolation. **The compiler (v0.74.4+) now automatically rewrites `${{ … }}` expressions inside `run:` blocks _and_ `safe_jobs:` step env vars** into `env:` bindings as part of compile — authors no longer need to manually rewrite expressions to clear the run-script guardrail; recompiling picks up the transform automatically. Older compiled lock files retain the manual form.
+
+**NFKC normalization + homoglyph detection** — SafeOutputs detects Unicode homoglyph attacks (e.g., Cyrillic characters disguised as Latin) via NFKC normalization, preventing safe-output key spoofing. Defense-in-depth: a prompt-injected agent emitting `аdd-comment` (Cyrillic `а`) gets normalized and rejected rather than silently dropped.
 
 ## Breaking Changes & Migrations
 
