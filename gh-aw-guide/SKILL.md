@@ -98,7 +98,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-05-22 against gh-aw v0.74.4 [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-05-22 against gh-aw v0.74.4 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -317,9 +317,10 @@ features:
   integrity-reactions: true
 tools:
   github:
+    min-integrity: approved                         # Baseline threshold for filtered content (paired with reactions)
     endorsement-reactions: [THUMBS_UP, HEART]       # Promote item to 'approved' (default when feature enabled)
     disapproval-reactions: [THUMBS_DOWN, CONFUSED]  # Demote item integrity (default when feature enabled)
-    endorser-min-integrity: approved                # Reactor must already be 'approved' for their reaction to count (default: approved)
+    endorser-min-integrity: approved                # Reactor's own integrity required for reaction to count (default: approved)
     disapproval-integrity: none                     # Integrity level assigned on qualifying disapproval (default: none)
 ```
 
@@ -421,8 +422,8 @@ gh-aw provides `lock-for-agent: true` to automatically lock/unlock the issue dur
 
 1. **Deterministic by default.** Use deterministic Actions and reusable workflows; agentic workflows only when the input is unstructured or AI unlocks a capability deterministic code cannot provide.
 2. **Limitations ARE the security model.** Don't engineer bypasses (`pull_request_target` for write access, PAT pools to evade bot attribution, `workflow_run` to escape approval gates, `roles: all` to widen the actor pool). When a boundary blocks a legitimate goal, escalate to platform owners.
-3. **Limit the agent job to agent-suitable work.** Keep filtering/skipping in pre-agent steps. Execute deterministic scripts before and after the agent job — the agent container should only see the inputs it needs to act on.
-4. **Apply least privilege on every dimension.** Minimum `permissions:`, `safe-outputs:`, `network.allowed:`, secrets, `tools:`. The agent container limits the write surface (prevents process escape) but does not neutralise prompt injection — untrusted input must still be treated as adversarial. **The same operation in pre/post-agent steps runs on the runner host with full secret access**, not inside the sandbox.
+3. **Limit the agent job to agent-suitable work.** Keep filtering/skipping in pre-agent steps. Execute deterministic scripts before and after the agent job.
+4. **Apply least privilege on every dimension.** Minimum `permissions:`, `safe-outputs:`, `network.allowed:`, secrets, `tools:`. The agent sandbox limits the write surface (prevents process escape) but does not neutralise prompt injection — untrusted input must still be treated as adversarial. The same operation in pre/post-agent steps runs on the runner host with full secret access.
 
 ## Frontmatter Features (Selected)
 
@@ -462,7 +463,7 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 
 **Token injection hardening** — Secrets are injected via `env:` blocks rather than inline `run:` interpolation. **The compiler (v0.74.4+) now automatically rewrites `${{ … }}` expressions inside `run:` blocks _and_ `safe_jobs:` step env vars** into `env:` bindings as part of compile — authors no longer need to manually rewrite expressions to clear the run-script guardrail; recompiling picks up the transform automatically. Older compiled lock files retain the manual form.
 
-**NFKC normalization + homoglyph detection** — SafeOutputs detects Unicode homoglyph attacks (e.g., Cyrillic characters disguised as Latin) via NFKC normalization, preventing safe-output key spoofing. Defense-in-depth: a prompt-injected agent emitting `аdd-comment` (Cyrillic `а`) gets normalized and rejected rather than silently dropped.
+**NFKC normalization + homoglyph detection** — SafeOutputs detects Unicode homoglyph attacks (e.g., Cyrillic characters disguised as Latin) via NFKC normalization combined with confusable-script analysis, preventing safe-output key spoofing.
 
 ## Breaking Changes & Migrations
 
