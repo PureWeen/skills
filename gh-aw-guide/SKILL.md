@@ -463,7 +463,7 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 
 **Token injection hardening** — Secrets are injected via `env:` blocks rather than inline `run:` interpolation. **The compiler (v0.74.4+) now automatically rewrites `${{ … }}` expressions inside `run:` blocks _and_ `safe_jobs:` step env vars** into `env:` bindings as part of compile — authors no longer need to manually rewrite expressions to clear the run-script guardrail; recompiling picks up the transform automatically. Older compiled lock files retain the manual form.
 
-**NFKC normalization + homoglyph detection** — SafeOutputs detects Unicode homoglyph attacks (e.g., Cyrillic characters disguised as Latin) via NFKC normalization combined with confusable-script analysis, preventing safe-output key spoofing.
+**NFKC normalization + homoglyph detection** — SafeOutputs detects Unicode homoglyph attacks (e.g., Cyrillic characters disguised as Latin) via NFKC normalization and homoglyph character mapping, preventing safe-output key spoofing.
 
 ## Breaking Changes & Migrations
 
