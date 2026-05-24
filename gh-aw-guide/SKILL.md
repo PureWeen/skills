@@ -26,13 +26,15 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 `.lock.yml` is auto-generated — **never edit manually**. On merge conflict, resolve in the source `.md`, accept either side for `.lock.yml`, then `gh aw compile` to regenerate. For deprecated flags, see [`references/migrations.md`](references/migrations.md). Full CLI reference: `gh aw --help`.
 
+> **💡 Compiler validation UX (v0.74.8+):** `gh aw compile` now emits `file:line:col:` positioning in validation errors so IDE tooling can jump directly to the problem. Typos in engine names, event names, permissions, or MCP types also produce a **"Did you mean…?"** suggestion using Levenshtein distance matching (e.g., `invalid engine: copiliot` → `Did you mean: copilot?`).
+
 ## 🚨 Before You Build: Prefer Built-in gh-aw Features
 
 **CRITICAL RULE:** Before implementing any trigger, output, scheduling, or interaction mechanism in a gh-aw workflow, check whether gh-aw has a built-in feature. Manual reimplementations are always worse — they miss platform integration (emoji reactions, sanitized inputs, noise reduction) and accumulate bugs.
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-05-22 against gh-aw v0.74.4):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-05-24 against gh-aw v0.74.8):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -326,6 +328,8 @@ tools:
 
 **`integrity-proxy: false`** — Disables the DIFC proxy for pre-agent `gh` CLI calls in workflow steps. Only use when you deliberately want to bypass integrity checks for a non-agentic step. Does NOT affect the MCP gateway filtering.
 
+**`network.allowed: [github]` domain coverage** — The `github` shorthand covers `github.com`, `api.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`, and (v0.74.8+) `patch-diff.githubusercontent.com`. Workflows that fetch PR diffs or patch-format data no longer need to add `patch-diff.githubusercontent.com` to a custom allowlist when using the `github` shorthand.
+
 **Interaction with `roles:`:**
 
 | `roles:` | `min-integrity` | Effect |
@@ -439,6 +443,8 @@ checkout:
 > ⚠️ **Submodule credential leak (pre-v0.74.4):** Compiled lock files previously used `persist-credentials: false` on checkout steps, but this setting was not respected when submodules were present, allowing credentials to persist in git config. `clean-git-credentials: true` resolves this.
 
 **`pre-steps:`** — Inject steps that run _before_ checkout and the agent, inside the same job. Recommended for token-minting actions (e.g., `actions/create-github-app-token`, `octo-sts`) for cross-repo checkout. The minted token stays in the same job, avoiding the masking issue when crossing job boundaries.
+
+**Reasoning message rendering** — When using a model with extended thinking (Claude extended thinking blocks, Codex `thinking` sections, Copilot `reasoning_text`), reasoning content is rendered with a `◯` open-circle icon and italic styling, visually distinguishing agent thought processes from regular output. No workflow configuration is required — this is automatic when the engine emits reasoning content.
 
 For exhaustive frontmatter reference (`source:`, `private:`, `resources:`, `labels:`, `runtimes:`, `imports:`, `engine.*`, etc.), see [github/gh-aw frontmatter docs](https://github.github.com/gh-aw/reference/frontmatter/).
 

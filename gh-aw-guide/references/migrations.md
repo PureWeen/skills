@@ -18,6 +18,9 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
 
+### Fixed in v0.74.8
+- **`patch-diff.githubusercontent.com` blocked by `network.allowed: [github]`** — The `github` domain shorthand did not include `patch-diff.githubusercontent.com`, causing workflows that fetch raw PR diffs to be blocked by the network firewall. Now included in the `github` ecosystem; no workflow change needed.
+
 ### Fixed in v0.74.4
 - **Submodule credential leak** — Compiled lock files using `persist-credentials: false` on checkout steps failed to scrub credentials when submodules were present. New `checkout.clean-git-credentials: true` option explicitly removes git credentials post-checkout. Workflows with submodules should add this option and recompile.
 - **`add_comment` allowed-mentions ignored** — The `allowed-mentions` config was not being passed through to the safe-outputs layer, causing all mentions to be escaped. Now correctly applied.
