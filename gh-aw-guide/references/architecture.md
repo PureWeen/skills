@@ -90,6 +90,8 @@ To **allow fork PRs**, add `forks: ["*"]` to the `pull_request` trigger in the `
 | **XPIA prompt** | Instructs LLM to resist prompt injection from untrusted content (hardened v0.70.0) | LLM compliance is probabilistic, not guaranteed; `disable-xpia-prompt` rejected at compile in strict mode |
 | **`pre_activation` role check** | Gates on write-access collaborators | Does not apply if `roles: all` is set |
 
+> **`network.allowed: [github]` domain list** — The `github` network preset covers the GitHub ecosystem of domains including `api.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`, and (v0.74.8+) `patch-diff.githubusercontent.com`. Workflows that fetch PR diffs via the patch-diff subdomain no longer need `network.allowed: [all]` as a workaround.
+
 ### Integrity Filtering
 
 Integrity filtering (`tools.github.min-integrity`) controls which GitHub content an agent can access during a workflow run. The MCP gateway filters content by trust level before the agent sees it.
@@ -340,6 +342,11 @@ Safe outputs enforce security through separation: agents run read-only and reque
 | **Custom** | `jobs:` (custom post-processing with MCP tool access), `actions:` (GitHub Action wrappers) |
 
 ### Key Safe Output Features
+
+**`push-to-pull-request-branch` notable options:**
+- **Append-only** — Only new commits are added; existing branch history is never rewritten.
+- **Auto-linearizes merge commits** — Before a signed push, the safe output automatically linearizes any merge commits in the branch (v0.76.1+). Branches with merge history no longer cause push failures; manual pre-linearization in `steps:` is no longer needed.
+- `protected-files: fallback-to-issue` — Create fallback issue if protected files are modified
 
 **`create-pull-request` notable options:**
 - `draft: true` — Enforced as policy (agent cannot override)

@@ -22,7 +22,10 @@ gh aw trial ./<name>.md --clone-repo owner/repo  # Test before merging to main
 gh aw lint                    # Validate .lock.yml without recompile
 gh aw audit <run-id>          # Analyze a completed run
 gh aw compile --approve       # Approve safe-update manifest changes (also on `run`, `upgrade`)
+gh aw replay <run-id>         # Render and stream unified timeline logs in-terminal (v0.76.1+)
 ```
+
+> 💡 **Validation error improvements (v0.74.8+):** Compile errors now include `file:line:col:` positioning for IDE jump-to-source, plus fuzzy "Did you mean?" suggestions for typos in engine names, event types, permissions, and MCP types (e.g., `invalid engine: copiliot` → `Did you mean: copilot?`).
 
 `.lock.yml` is auto-generated — **never edit manually**. On merge conflict, resolve in the source `.md`, accept either side for `.lock.yml`, then `gh aw compile` to regenerate. For deprecated flags, see [`references/migrations.md`](references/migrations.md). Full CLI reference: `gh aw --help`.
 
@@ -32,7 +35,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-05-22 against gh-aw v0.74.4):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-05-27 against gh-aw v0.76.1):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -58,6 +61,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 | Stale blocking reviews from previous `/review` runs | `supersede-older-reviews: true` on `submit-pull-request-review` |
 | Merging PRs via shell `gh pr merge` in post-steps | `merge-pull-request` safe output |
 | Keeping PR branch up-to-date with base manually | `update-branch: true` on `update-pull-request` |
+| Calling `gh pr merge` from steps to linearize before push | `push-to-pull-request-branch` auto-linearizes merge commits before a signed push (append-only: only new commits are added, existing history is preserved) |
 | Configuring the GitHub CLI proxy mode | `tools.github.mode: gh-proxy` (deprecated `cli-proxy` removed) |
 | `slash_command:` without `events:` filter | `events: [pull_request_comment]` or `events: [issue_comment]` |
 | `cancel-in-progress: true` on `slash_command:` workflows | `cancel-in-progress: false` |
@@ -98,7 +102,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-05-22 against gh-aw v0.74.4 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-05-27 against gh-aw v0.76.1 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -441,6 +445,14 @@ checkout:
 **`pre-steps:`** — Inject steps that run _before_ checkout and the agent, inside the same job. Recommended for token-minting actions (e.g., `actions/create-github-app-token`, `octo-sts`) for cross-repo checkout. The minted token stays in the same job, avoiding the masking issue when crossing job boundaries.
 
 For exhaustive frontmatter reference (`source:`, `private:`, `resources:`, `labels:`, `runtimes:`, `imports:`, `engine.*`, etc.), see [github/gh-aw frontmatter docs](https://github.github.com/gh-aw/reference/frontmatter/).
+
+**`tracker-id:`** — Correlate workflow runs with external tracking systems (e.g., incident trackers, sprint boards). Appears in run metadata and makes it easier to link gh-aw executions to upstream work items:
+
+```yaml
+tracker-id: "INCIDENT-42"
+```
+
+**Inline skills** — Skills can now be defined and run inline within workflows, mirroring the inline sub-agent syntax. This eliminates the need to maintain a separate skills file for small, workflow-specific skills:
 
 ## Safe Outputs You May Not Know About
 
