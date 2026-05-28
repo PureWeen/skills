@@ -18,6 +18,12 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
 
+### Fixed in v0.76.1
+- **`push_to_pull_request_branch` push failures on branches with merge history** — The safe output now auto-linearizes (rebases) merge commits before performing the signed push, preventing failures on PR branches that include merge commits. Append-only semantics are preserved; no configuration change needed.
+
+### Fixed in v0.74.8
+- **`push_to_pull_request_branch` append-only behavior documented** — The safe output was always append-only but this was not documented, leading to confusion. Now formally documented. See also the v0.76.1 auto-linearize fix for the related push-failure scenario.
+
 ### Fixed in v0.74.4
 - **Submodule credential leak** — Compiled lock files using `persist-credentials: false` on checkout steps failed to scrub credentials when submodules were present. New `checkout.clean-git-credentials: true` option explicitly removes git credentials post-checkout. Workflows with submodules should add this option and recompile.
 - **`add_comment` allowed-mentions ignored** — The `allowed-mentions` config was not being passed through to the safe-outputs layer, causing all mentions to be escaped. Now correctly applied.
