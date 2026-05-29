@@ -22,6 +22,7 @@ gh aw trial ./<name>.md --clone-repo owner/repo  # Test before merging to main
 gh aw lint                    # Validate .lock.yml without recompile
 gh aw audit <run-id>          # Analyze a completed run
 gh aw compile --approve       # Approve safe-update manifest changes (also on `run`, `upgrade`)
+gh aw replay <run-id>         # Render and stream unified timeline logs in terminal for post-run analysis
 ```
 
 `.lock.yml` is auto-generated — **never edit manually**. On merge conflict, resolve in the source `.md`, accept either side for `.lock.yml`, then `gh aw compile` to regenerate. For deprecated flags, see [`references/migrations.md`](references/migrations.md). Full CLI reference: `gh aw --help`.
@@ -32,7 +33,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-05-22 against gh-aw v0.74.4):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-05-26 against gh-aw v0.76.1):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -427,6 +428,12 @@ gh-aw provides `lock-for-agent: true` to automatically lock/unlock the issue dur
 
 ## Frontmatter Features (Selected)
 
+**`tracker-id:`** — Correlate a workflow run with an external tracking system (e.g., a Jira issue key or internal job ID). The value is recorded in run metadata and surfaced in `gh aw audit` output, making it easier to cross-reference gh-aw runs against external work-tracking tools.
+
+```yaml
+tracker-id: ${{ inputs.jira_key }}   # or a literal string
+```
+
 **`on.needs:`** — Express dependencies on custom `pre_activation`/`activation` jobs, enabling GitHub App credentials to be sourced from upstream job outputs. See also `safe-outputs.needs` for credential-supply dependencies in the safe-outputs job.
 
 **`checkout.clean-git-credentials`** — Remove cached git credentials from the workspace after checkout, preventing credential leaks when subsequent steps or build tools use submodules. Required for repositories where `persist-credentials: false` alone was insufficient (e.g., compiled lock files that use submodule checkout patterns):
@@ -442,6 +449,20 @@ checkout:
 
 For exhaustive frontmatter reference (`source:`, `private:`, `resources:`, `labels:`, `runtimes:`, `imports:`, `engine.*`, etc.), see [github/gh-aw frontmatter docs](https://github.github.com/gh-aw/reference/frontmatter/).
 
+## Inline Skills
+
+Skills can be defined inline within a workflow file, mirroring the inline sub-agent syntax. This allows self-contained workflows without referencing external skill files:
+
+```yaml
+skills:
+  - name: my-inline-skill
+    inline: |
+      You are a code reviewer. Focus on security issues and performance.
+      When reviewing diffs, always check for secrets in environment variables.
+```
+
+Inline skills follow the same extraction/runtime rules as external skill files. Use external skill files when the skill is shared across multiple workflows.
+
 ## Safe Outputs You May Not Know About
 
 The official safe-outputs reference covers 30+ output types — the ones below are commonly missed even though they materially change workflow design:
@@ -450,6 +471,7 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 - **`upload-artifact:`** — Upload files as run-scoped GitHub Actions artifacts (configured via `max-uploads:` not `max:`). Prefer over `upload-asset:` for most cases.
 - **`dispatch_repository:`** *(experimental)* — Trigger `repository_dispatch` in **external** repositories. **Audit carefully:** pairing with `roles: all` lets untrusted triggers reach other repos.
 - **Custom safe-output `jobs:` and `actions:`** — Register post-processing jobs as MCP tools (`safe-outputs.jobs:`) or mount any public GitHub Action as an agent-callable tool (`safe-outputs.actions:`).
+- **`push-to-pull-request-branch:` is append-only** — This safe output can only add commits to a branch; it cannot rewrite history. Additionally, the runtime now auto-linearizes merge commits before performing a signed push, preventing push failures on branches with merge history. Design workflows accordingly — if you need rebase/force-push semantics, use a custom `safe-outputs.actions:` wrapper.
 - **`add-comment.discussions: false`** — Opts the workflow out of `discussions:write` permission. **Set this when the workflow only comments on issues/PRs** — otherwise the safe-outputs job carries an unnecessary write scope.
 - **`add-comment.allowed-mentions:`** — Permit specific `@team` or `@user` mentions (others are escaped). The author of the parent issue/PR/discussion is auto-preserved.
 
@@ -464,6 +486,13 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 **Token injection hardening** — Secrets are injected via `env:` blocks rather than inline `run:` interpolation. **The compiler (v0.74.4+) now automatically rewrites `${{ … }}` expressions inside `run:` blocks _and_ `safe_jobs:` step env vars** into `env:` bindings as part of compile — authors no longer need to manually rewrite expressions to clear the run-script guardrail; recompiling picks up the transform automatically. Older compiled lock files retain the manual form.
 
 **NFKC normalization + homoglyph detection** — SafeOutputs detects Unicode homoglyph attacks (e.g., Cyrillic characters disguised as Latin) via NFKC normalization and homoglyph character mapping, preventing safe-output key spoofing.
+
+**Compiler validation improvements** — The compiler now includes two author-facing DX improvements in validation errors:
+
+- **Fuzzy "Did You Mean?" suggestions** — When you mistype an engine name, event, permission, or MCP type (e.g., `engine: copiliot`), the error now includes a `Did you mean: copilot?` suggestion using Levenshtein distance matching.
+- **File/line/column context** — Validation errors now include `file:line:col:` positioning so IDE tooling can jump directly to the problematic field.
+
+**`network.allowed: [github]` now includes `patch-diff.githubusercontent.com`** — Workflows using `network.allowed: [github]` can now fetch PR diffs from `patch-diff.githubusercontent.com` without additional allowlist entries. Previously this domain was blocked even under the `github` preset, causing diff-fetch steps to fail silently.
 
 ## Breaking Changes & Migrations
 
