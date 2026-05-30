@@ -22,9 +22,12 @@ gh aw trial ./<name>.md --clone-repo owner/repo  # Test before merging to main
 gh aw lint                    # Validate .lock.yml without recompile
 gh aw audit <run-id>          # Analyze a completed run
 gh aw compile --approve       # Approve safe-update manifest changes (also on `run`, `upgrade`)
+gh aw replay <run-id>         # Render and stream unified timeline logs for post-run analysis
 ```
 
 `.lock.yml` is auto-generated — **never edit manually**. On merge conflict, resolve in the source `.md`, accept either side for `.lock.yml`, then `gh aw compile` to regenerate. For deprecated flags, see [`references/migrations.md`](references/migrations.md). Full CLI reference: `gh aw --help`.
+
+> **Compiler DX improvements** — Validation errors now include fuzzy "Did You Mean?" suggestions (Levenshtein distance matching) when you mistype engine names, events, permissions, or MCP types (e.g., `invalid engine: copiliot` → `Did you mean: copilot?`). Errors also show `file:line:col:` positioning so IDE tooling can jump directly to the problematic field.
 
 ## 🚨 Before You Build: Prefer Built-in gh-aw Features
 
@@ -32,7 +35,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-05-22 against gh-aw v0.74.4):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-05-30 against gh-aw v0.76.1):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -62,6 +65,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 | `slash_command:` without `events:` filter | `events: [pull_request_comment]` or `events: [issue_comment]` |
 | `cancel-in-progress: true` on `slash_command:` workflows | `cancel-in-progress: false` |
 | `pull_request` trigger for agentic workflows | `slash_command:`, `label_command:`, or `schedule` |
+| Defining reusable skills as separate workflow files | Inline skill syntax (define and run skills directly within the workflow) |
 
 ## Common Patterns
 
@@ -98,7 +102,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-05-22 against gh-aw v0.74.4 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-05-30 against gh-aw v0.76.1 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -122,6 +126,8 @@ safe-outputs:
 > | `create-code-scanning-alert` / `missing-tool` / `missing-data` | items | unlimited |
 >
 > **Sizing principle**: `max:` is a blast-radius cap, not a retry budget. The safe-outputs infrastructure handles HTTP 429/5xx retries independently. Raising `max:` doesn't help retries; **lowering it below legitimate item count silently drops items beyond the cap**. For multi-item types (`add-labels`, `add-reviewer`, all PR-review-comment types), set `max:` to the realistic per-run maximum — e.g., `add-labels: max: 1` on a labeler that emits `area-*` + `platform/*` will drop one of them every time.
+
+> **`push-to-pull-request-branch` is append-only** — commits are always added on top of the current branch HEAD; rewrites and force-pushes are not supported. Merge commits on the branch are auto-linearized before the signed push, so branches with merge history no longer cause push failures.
 
 ### Add Labels — Security Hardening
 
@@ -439,6 +445,23 @@ checkout:
 > ⚠️ **Submodule credential leak (pre-v0.74.4):** Compiled lock files previously used `persist-credentials: false` on checkout steps, but this setting was not respected when submodules were present, allowing credentials to persist in git config. `clean-git-credentials: true` resolves this.
 
 **`pre-steps:`** — Inject steps that run _before_ checkout and the agent, inside the same job. Recommended for token-minting actions (e.g., `actions/create-github-app-token`, `octo-sts`) for cross-repo checkout. The minted token stays in the same job, avoiding the masking issue when crossing job boundaries.
+
+**`tracker-id:`** — Correlate workflow runs with external tracking systems (project boards, JIRA, Sentry, etc.). The value is passed through to the run metadata and accessible in observability integrations:
+
+```yaml
+tracker-id: PROJ-1234
+```
+
+**Inline skills** — Define and run skills inline within a workflow without creating separate files, mirroring the inline sub-agent syntax:
+
+```yaml
+skills:
+  - name: my-inline-skill
+    inline: |
+      # Inline skill prompt here
+```
+
+This is the preferred pattern when a skill is only used by one workflow.
 
 For exhaustive frontmatter reference (`source:`, `private:`, `resources:`, `labels:`, `runtimes:`, `imports:`, `engine.*`, etc.), see [github/gh-aw frontmatter docs](https://github.github.com/gh-aw/reference/frontmatter/).
 
