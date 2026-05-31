@@ -22,9 +22,12 @@ gh aw trial ./<name>.md --clone-repo owner/repo  # Test before merging to main
 gh aw lint                    # Validate .lock.yml without recompile
 gh aw audit <run-id>          # Analyze a completed run
 gh aw compile --approve       # Approve safe-update manifest changes (also on `run`, `upgrade`)
+gh aw replay <run-id>         # Render and stream unified timeline logs in terminal for post-run analysis
 ```
 
 `.lock.yml` is auto-generated — **never edit manually**. On merge conflict, resolve in the source `.md`, accept either side for `.lock.yml`, then `gh aw compile` to regenerate. For deprecated flags, see [`references/migrations.md`](references/migrations.md). Full CLI reference: `gh aw --help`.
+
+> 💡 **Validation error improvements:** The compiler now emits `file:line:col:` positioning on validation errors so IDE tooling can jump directly to the problematic field. It also surfaces **"Did you mean?"** suggestions when you mistype engine names, events, permissions, or MCP types (e.g., `invalid engine: copiliot` → `Did you mean: copilot?`), catching common typos at compile time.
 
 ## 🚨 Before You Build: Prefer Built-in gh-aw Features
 
@@ -32,7 +35,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-05-22 against gh-aw v0.74.4):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-05-26 against gh-aw v0.76.1):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -98,7 +101,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-05-22 against gh-aw v0.74.4 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-05-26 against gh-aw v0.76.1 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -425,7 +428,15 @@ gh-aw provides `lock-for-agent: true` to automatically lock/unlock the issue dur
 3. **Limit the agent job to agent-suitable work.** Keep filtering/skipping in pre-agent steps. Execute deterministic scripts before and after the agent job.
 4. **Apply least privilege on every dimension.** Minimum `permissions:`, `safe-outputs:`, `network.allowed:`, secrets, `tools:`. The agent sandbox limits the write surface (prevents process escape) but does not neutralise prompt injection — untrusted input must still be treated as adversarial. The same operation in pre/post-agent steps runs on the runner host with full secret access.
 
+> 💡 **`network.allowed: [github]` domain coverage:** The `github` preset includes `patch-diff.githubusercontent.com`, so workflows using `network.allowed: [github]` can fetch raw PR diffs (e.g., via `https://patch-diff.githubusercontent.com/raw/...`) without additional network rules.
+
 ## Frontmatter Features (Selected)
+
+**`tracker-id:`** — Correlate workflow runs with external tracking systems. Set in frontmatter; the value appears in run telemetry, making it easy to join gh-aw run data with external observability or ticketing systems:
+
+```yaml
+tracker-id: "PROJ-1234"   # Free-form string; appears in OTLP traces and run metadata
+```
 
 **`on.needs:`** — Express dependencies on custom `pre_activation`/`activation` jobs, enabling GitHub App credentials to be sourced from upstream job outputs. See also `safe-outputs.needs` for credential-supply dependencies in the safe-outputs job.
 
@@ -440,12 +451,25 @@ checkout:
 
 **`pre-steps:`** — Inject steps that run _before_ checkout and the agent, inside the same job. Recommended for token-minting actions (e.g., `actions/create-github-app-token`, `octo-sts`) for cross-repo checkout. The minted token stays in the same job, avoiding the masking issue when crossing job boundaries.
 
+**Inline skills** — Skills can be defined inline within the workflow `.md` file (mirroring the inline sub-agent syntax) instead of requiring a separate file in `.github/skills/`. Use when a skill is tightly coupled to a single workflow and doesn't need to be shared:
+
+```yaml
+# In your workflow .md frontmatter
+skills:
+  - name: my-inline-skill
+    inline: |
+      # My Inline Skill
+      This skill is defined directly in the workflow file.
+      Use it for workflow-specific guidance that doesn't need sharing.
+```
+
 For exhaustive frontmatter reference (`source:`, `private:`, `resources:`, `labels:`, `runtimes:`, `imports:`, `engine.*`, etc.), see [github/gh-aw frontmatter docs](https://github.github.com/gh-aw/reference/frontmatter/).
 
 ## Safe Outputs You May Not Know About
 
 The official safe-outputs reference covers 30+ output types — the ones below are commonly missed even though they materially change workflow design:
 
+- **`push-to-pull-request-branch:`** — **Append-only**: the safe output only adds new commits; it cannot rewrite or force-push history. Merge commits are **auto-linearized** (rebased) before the signed push, preventing push failures on branches with merge history. Default `max: 1`.
 - **`set-issue-type:` / `set-issue-field:`** — Set GitHub Issues type or any single field by name/value (default `max: 5`). Useful for triage workflows that classify issues without using labels.
 - **`upload-artifact:`** — Upload files as run-scoped GitHub Actions artifacts (configured via `max-uploads:` not `max:`). Prefer over `upload-asset:` for most cases.
 - **`dispatch_repository:`** *(experimental)* — Trigger `repository_dispatch` in **external** repositories. **Audit carefully:** pairing with `roles: all` lets untrusted triggers reach other repos.

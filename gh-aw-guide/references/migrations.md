@@ -18,6 +18,13 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
 
+### Fixed in v0.76.1
+- **`push_to_pull_request_branch` push failures on branches with merge history** — Merge commits are now auto-linearized (rebased) before the signed push. Previously, attempting to push to a branch with merge commits would fail. No configuration change needed.
+
+### Fixed in v0.74.8
+- **`patch-diff.githubusercontent.com` blocked under `network.allowed: [github]`** — Requests to `patch-diff.githubusercontent.com` (used for raw PR diff fetching) were blocked even when `network.allowed: [github]` was set. The domain is now part of the `github` ecosystem preset.
+- **Validation errors lacked position info** — Compiler validation errors now include `file:line:col:` context so IDE tooling can jump to the problem field directly.
+
 ### Fixed in v0.74.4
 - **Submodule credential leak** — Compiled lock files using `persist-credentials: false` on checkout steps failed to scrub credentials when submodules were present. New `checkout.clean-git-credentials: true` option explicitly removes git credentials post-checkout. Workflows with submodules should add this option and recompile.
 - **`add_comment` allowed-mentions ignored** — The `allowed-mentions` config was not being passed through to the safe-outputs layer, causing all mentions to be escaped. Now correctly applied.
