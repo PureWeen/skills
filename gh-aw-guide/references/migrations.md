@@ -18,6 +18,14 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
 
+### Fixed in v0.76.1
+- **`push_to_pull_request_branch` merge-commit push failures** — Branches with merge history (e.g., from base-branch syncs) previously caused signed-push failures. The safe output now auto-linearizes merge commits before pushing. No configuration change needed; upgrade and recompile.
+
+### Fixed in v0.74.8
+- **`patch-diff.githubusercontent.com` blocked under `network.allowed: [github]`** — Workflows using the `github` network preset were unable to fetch PR diffs from `patch-diff.githubusercontent.com`. This domain is now included in the preset. If you added a manual network override to work around this, remove it and recompile.
+- **Compiler: missing `file:line:col:` context in validation errors** — Validation errors previously lacked source location, requiring manual search. Errors now include `file:line:col:` positioning for IDE jump-to support.
+- **Compiler: no "Did you mean?" suggestion for typos** — Typos in engine names, event names, permissions, or MCP types previously produced generic "invalid value" errors. The compiler now uses Levenshtein distance to suggest the closest valid value.
+
 ### Fixed in v0.74.4
 - **Submodule credential leak** — Compiled lock files using `persist-credentials: false` on checkout steps failed to scrub credentials when submodules were present. New `checkout.clean-git-credentials: true` option explicitly removes git credentials post-checkout. Workflows with submodules should add this option and recompile.
 - **`add_comment` allowed-mentions ignored** — The `allowed-mentions` config was not being passed through to the safe-outputs layer, causing all mentions to be escaped. Now correctly applied.

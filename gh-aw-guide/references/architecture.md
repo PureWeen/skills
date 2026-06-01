@@ -359,6 +359,10 @@ Safe outputs enforce security through separation: agents run read-only and reque
 - `allowed-mentions: ["@team"]` — Permit specific @-mentions in the comment body (others are escaped). Correctly applied as of v0.74.4 (previously the config was not passed through, causing all mentions to be escaped). **`@copilot` is auto-preserved** even when not listed here (v0.74.4+) — useful for review workflows that prefix `@copilot ` to trigger follow-up.
 - **PR review thread routing** (v0.70.0+): On `pull_request_review_comment` triggers, `add_comment` now replies directly in the review thread instead of posting at the PR level.
 
+**`push-to-pull-request-branch` behavior:**
+- **Append-only.** The safe output auto-linearizes merge commits before performing a signed push. This prevents push failures when the PR branch has accumulated merge history (e.g., from base-branch syncs). Authors do not need to manually linearize; the infrastructure handles it.
+- `protected-files:` is enforced on every push — agent modifications to `.github/`, package manifests, etc. are blocked (or fall back to an issue if `fallback-to-issue` is configured).
+
 ---
 
 ## Limitations
@@ -410,6 +414,7 @@ These issues are now **all closed** — documented here for historical context:
 | Agent-created PR has no CI checks | `GITHUB_TOKEN` pushes don't trigger Actions | Add `github-token-for-extra-empty-commit:` with a PAT or GitHub App |
 | `/slash-command` doesn't trigger | Workflow not on default branch | Merge to `main` first |
 | Agent sees stale issue/PR content | Integrity filtering removed it | Check `min-integrity` level; content from `FIRST_TIMER` is filtered at `approved` |
+| Workflow blocks when fetching PR diffs via `network.allowed: [github]` | `patch-diff.githubusercontent.com` was previously not in the GitHub domain allowlist | Fixed — this domain is now included in the `github` network preset. Recompile workflows using `network.allowed: [github]` if they call `gh pr diff` or fetch patch URLs and previously added a manual domain override. |
 | Protected file error on PR creation | Agent modified `.github/` or package manifests | Set `protected-files: fallback-to-issue` or `allowed` if intentional |
 | Stale blocking review after fixes | Agent posted `REQUEST_CHANGES` but can't dismiss it | Switch to `allowed-events: [COMMENT]`; use severity markers in body instead |
 | Agent run killed by unrelated comment | `cancel-in-progress: true` + `slash_command:` with broad event subscription | Use `cancel-in-progress: false`; narrow `events:` to reduce concurrency group collisions |
