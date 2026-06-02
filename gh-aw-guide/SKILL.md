@@ -21,8 +21,11 @@ gh aw run <name> --ref main   # Trigger a workflow_dispatch run on a branch
 gh aw trial ./<name>.md --clone-repo owner/repo  # Test before merging to main
 gh aw lint                    # Validate .lock.yml without recompile
 gh aw audit <run-id>          # Analyze a completed run
+gh aw replay <run-id>         # Render and stream unified timeline logs in terminal (v0.76.1+)
 gh aw compile --approve       # Approve safe-update manifest changes (also on `run`, `upgrade`)
 ```
+
+> **💡 Improved validation errors (v0.74.8+):** Compiler validation errors now include `file:line:col:` positioning for IDE jump-to-source, and fuzzy "Did you mean?" suggestions when you mistype engine names, events, permissions, or MCP types (e.g., `invalid engine: copiliot` → `Did you mean: copilot?`).
 
 `.lock.yml` is auto-generated — **never edit manually**. On merge conflict, resolve in the source `.md`, accept either side for `.lock.yml`, then `gh aw compile` to regenerate. For deprecated flags, see [`references/migrations.md`](references/migrations.md). Full CLI reference: `gh aw --help`.
 
@@ -32,7 +35,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-05-22 against gh-aw v0.74.4):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-06-02 against gh-aw v0.77.5):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -64,6 +67,19 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 | `pull_request` trigger for agentic workflows | `slash_command:`, `label_command:`, or `schedule` |
 
 ## Common Patterns
+
+### Inline Skills
+
+Define and run skills inline within a workflow, without requiring a separate file in `.github/skills/`. Mirrors the inline sub-agent syntax for a more consistent authoring experience:
+
+```yaml
+skills:
+  - name: my-inline-skill
+    inline: |
+      You are a specialized reviewer. Focus on...
+```
+
+Inline skills are useful for simple, workflow-specific skills that don't need to be reused across multiple workflows. For shared skills, prefer the file-based form (`.github/skills/<name>.md`) which can be imported by multiple workflows.
 
 ### Pre-Agent Data Prep (`steps:`)
 
@@ -98,7 +114,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-05-22 against gh-aw v0.74.4 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-06-02 against gh-aw v0.77.5 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -112,7 +128,7 @@ safe-outputs:
 > | `set-issue-type` / `set-issue-field` | operations | 5 |
 > | `update-project` / `close-pull-request` | operations | 10 |
 > | `create-issue` / `update-issue` / `close-issue` | issues / updates / closures | 1 |
-> | `create-pull-request` / `update-pull-request` / `push-to-pull-request-branch` | PRs / updates / pushes | 1 |
+> - **`create-pull-request` / `update-pull-request` / `push-to-pull-request-branch`** — PRs / updates / pushes — default `max: 1`. **`push-to-pull-request-branch` is append-only** (v0.76.1+): the safe output auto-linearizes merge commits before the signed push, preventing push failures on branches with merge history. Do not attempt manual `git rebase` in `post-steps:` to work around merge-commit push failures — the platform handles this automatically on recompile.
 > | `submit-pull-request-review` | reviews | 1 |
 > | `assign-*` / `unassign-*` / `link-sub-issue` | individual ops | 1 |
 > | `create-discussion` / `update-discussion` / `close-discussion` | items | 1 |
@@ -426,6 +442,18 @@ gh-aw provides `lock-for-agent: true` to automatically lock/unlock the issue dur
 4. **Apply least privilege on every dimension.** Minimum `permissions:`, `safe-outputs:`, `network.allowed:`, secrets, `tools:`. The agent sandbox limits the write surface (prevents process escape) but does not neutralise prompt injection — untrusted input must still be treated as adversarial. The same operation in pre/post-agent steps runs on the runner host with full secret access.
 
 ## Frontmatter Features (Selected)
+
+**`tracker-id:`** — Correlate a workflow run with an external tracking system (e.g., a Jira ticket, a project board item). The value is a free-form string, stored in run metadata for downstream querying. Documented in the frontmatter reference as of v0.76.1.
+
+```yaml
+tracker-id: "PROJ-1234"
+```
+
+**`project-utc-offset:`** — Set a project-level UTC offset so rendered timestamps and expiration messages display correctly for teams in a specific timezone (v0.77.5+). Without this, timestamps render in UTC.
+
+```yaml
+project-utc-offset: "+09:00"   # JST — timestamps and expiry notices use this offset
+```
 
 **`on.needs:`** — Express dependencies on custom `pre_activation`/`activation` jobs, enabling GitHub App credentials to be sourced from upstream job outputs. See also `safe-outputs.needs` for credential-supply dependencies in the safe-outputs job.
 

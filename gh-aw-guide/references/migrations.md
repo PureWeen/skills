@@ -18,6 +18,17 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
 
+### Fixed in v0.77.5
+- **ET guardrail requires explicit configuration** — The daily effective-workflow (ET) guardrail and its `@actions/artifact` client setup are now only activated when explicitly configured in the workflow. Previously, the guardrail could run overhead even in workflows that did not use it. Workflows that rely on the ET guardrail must now add explicit configuration to opt in.
+- **`@actions/artifact` install for ET guardrail** — Resolved a missing dependency that caused failures when the daily effective-workflow guardrail was enabled. If you saw artifact-client errors after opting into the ET guardrail, recompile to pick up the fix.
+
+### Fixed in v0.76.1
+- **`push-to-pull-request-branch` push failures on merge history** — Branches with merge commits previously caused signed-push failures. The safe output now auto-linearizes merge commits before pushing. No workflow-source change is needed; recompile to pick up the behavior.
+
+### Fixed in v0.74.8
+- **`patch-diff.githubusercontent.com` blocked in `network.allowed: [github]`** — Workflows that needed to fetch PR diffs from `patch-diff.githubusercontent.com` had to add it as a separate custom domain. It is now included in the `github` named domain group automatically. Recompile to remove any manual entries.
+- **Fuzzy validation errors** — Compiler validation errors now include `file:line:col:` positioning and "Did you mean?" suggestions for mistyped engine names, events, permissions, and MCP types. No workflow change needed.
+
 ### Fixed in v0.74.4
 - **Submodule credential leak** — Compiled lock files using `persist-credentials: false` on checkout steps failed to scrub credentials when submodules were present. New `checkout.clean-git-credentials: true` option explicitly removes git credentials post-checkout. Workflows with submodules should add this option and recompile.
 - **`add_comment` allowed-mentions ignored** — The `allowed-mentions` config was not being passed through to the safe-outputs layer, causing all mentions to be escaped. Now correctly applied.

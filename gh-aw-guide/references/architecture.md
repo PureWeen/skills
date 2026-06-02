@@ -44,6 +44,8 @@ pre-agent-steps:
       echo "Files changed: $(gh pr diff $PR_NUMBER --name-only | wc -l)" > complexity.txt
 ```
 
+**Reasoning message rendering (v0.74.8+):** Agent "thinking" output — Claude extended thinking blocks, Codex `thinking` sections, Copilot `reasoning_text` — renders in logs with a distinct `◯` (open circle) icon and italic styling. This makes the agent's thought process visible and distinguishable from regular output when reviewing run logs.
+
 **`post-steps:`** run after the agent completes but before safe-outputs. Use these for cleanup, metrics, or post-processing.
 
 ### Prompt Rendering
@@ -80,6 +82,8 @@ To **allow fork PRs**, add `forks: ["*"]` to the `pull_request` trigger in the `
 | Layer | What it does | What it doesn't do |
 |-------|-------------|-------------------|
 | **AWF network firewall** | Restricts outbound to allowlisted domains | Doesn't prevent reading env vars inside the container |
+
+> **`network.allowed: [github]` domain ecosystem** — The `github` named domain group includes `github.com`, `api.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`, `codeload.github.com`, and (v0.74.8+) `patch-diff.githubusercontent.com`. This last addition allows workflows using `network.allowed: [github]` to fetch PR diffs (via `patch-diff.githubusercontent.com`) without requiring a custom domain allowlist. If your workflow retrieves PR diffs and previously needed `network.allowed: [github, patch-diff.githubusercontent.com]`, recompile — the separate entry is now redundant.
 | **`redact_secrets.cjs`** | Scrubs known secret values from logs/artifacts post-agent | Doesn't catch encoded/obfuscated values |
 | **Threat detection agent** | Reviews agent outputs before safe-outputs publishes them | Can miss novel exfiltration techniques |
 | **Safe-outputs permission separation** | Write operations happen in separate job, not the agent | Agent can still request writes via safe-output tools |
@@ -332,7 +336,7 @@ Safe outputs enforce security through separation: agents run read-only and reque
 | Category | Types |
 |----------|-------|
 | **Issues & Discussions** | `create-issue`, `update-issue`, `close-issue`, `link-sub-issue`, `create-discussion`, `update-discussion`, `close-discussion` |
-| **Pull Requests** | `create-pull-request`, `update-pull-request`, `close-pull-request`, `create-pull-request-review-comment`, `reply-to-pull-request-review-comment`, `resolve-pull-request-review-thread`, `push-to-pull-request-branch`, `add-reviewer` |
+| **Pull Requests** | `create-pull-request`, `update-pull-request`, `close-pull-request`, `create-pull-request-review-comment`, `reply-to-pull-request-review-comment`, `resolve-pull-request-review-thread`, `push-to-pull-request-branch` *(append-only; auto-linearizes merge commits — v0.76.1+)*, `add-reviewer` |
 | **Labels & Assignments** | `add-comment`, `hide-comment`, `add-labels`, `remove-labels`, `assign-milestone`, `assign-to-agent`, `assign-to-user`, `unassign-from-user` |
 | **Projects & Releases** | `create-project`, `update-project`, `create-project-status-update`, `update-release`, `upload-asset` |
 | **Workflow & Security** | `dispatch-workflow`, `call-workflow`, `dispatch_repository`, `create-code-scanning-alert`, `autofix-code-scanning-alert`, `create-agent-session` |
