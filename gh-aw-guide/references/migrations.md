@@ -18,6 +18,17 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
 
+### Fixed in v0.77.5
+- **Gate daily ET guardrail on explicit configuration** — The daily effective-workflow guardrail and its artifact client setup are now only activated when explicitly configured; previously they incurred overhead in all workflows regardless of configuration.
+- **`@actions/artifact` install for ET guardrail** — Resolved a missing dependency that caused failures when the daily-effective-workflow guardrail was enabled.
+
+### Fixed in v0.76.1
+- **`push_to_pull_request_branch` merge-history push failures** — The safe output now auto-linearizes merge commits before a signed push, preventing push failures on branches with merge history. Append-only behavior is unchanged; no workflow configuration change required.
+
+### Fixed in v0.74.8
+- **`patch-diff.githubusercontent.com` added to `network.allowed: [github]`** — Workflows using `network.allowed: [github]` can now fetch PR patch diffs from `patch-diff.githubusercontent.com` without requiring additional custom domain allowances. No configuration change needed.
+- **Validation errors include file/line context** — Compilation errors now show `file:line:col:` positioning, enabling IDE tooling to jump directly to the problematic field. Fuzzy "Did you mean?" suggestions are also emitted when engine names, events, permissions, or MCP types are mistyped (e.g., `invalid engine: copiliot` → `Did you mean: copilot?`).
+
 ### Fixed in v0.74.4
 - **Submodule credential leak** — Compiled lock files using `persist-credentials: false` on checkout steps failed to scrub credentials when submodules were present. New `checkout.clean-git-credentials: true` option explicitly removes git credentials post-checkout. Workflows with submodules should add this option and recompile.
 - **`add_comment` allowed-mentions ignored** — The `allowed-mentions` config was not being passed through to the safe-outputs layer, causing all mentions to be escaped. Now correctly applied.

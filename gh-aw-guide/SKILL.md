@@ -22,6 +22,7 @@ gh aw trial ./<name>.md --clone-repo owner/repo  # Test before merging to main
 gh aw lint                    # Validate .lock.yml without recompile
 gh aw audit <run-id>          # Analyze a completed run
 gh aw compile --approve       # Approve safe-update manifest changes (also on `run`, `upgrade`)
+gh aw replay <run-id>         # Render and stream unified timeline logs for post-run analysis
 ```
 
 `.lock.yml` is auto-generated — **never edit manually**. On merge conflict, resolve in the source `.md`, accept either side for `.lock.yml`, then `gh aw compile` to regenerate. For deprecated flags, see [`references/migrations.md`](references/migrations.md). Full CLI reference: `gh aw --help`.
@@ -32,7 +33,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-05-22 against gh-aw v0.74.4):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-06-03 against gh-aw v0.77.5):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -61,6 +62,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 | Configuring the GitHub CLI proxy mode | `tools.github.mode: gh-proxy` (deprecated `cli-proxy` removed) |
 | `slash_command:` without `events:` filter | `events: [pull_request_comment]` or `events: [issue_comment]` |
 | `cancel-in-progress: true` on `slash_command:` workflows | `cancel-in-progress: false` |
+| Defining skills as separate files when you need inline scope | Inline skill syntax — define and run skills inline within workflows, mirroring inline sub-agent syntax (`inline: true` in skill frontmatter) |
 | `pull_request` trigger for agentic workflows | `slash_command:`, `label_command:`, or `schedule` |
 
 ## Common Patterns
@@ -437,6 +439,12 @@ checkout:
 ```
 
 > ⚠️ **Submodule credential leak (pre-v0.74.4):** Compiled lock files previously used `persist-credentials: false` on checkout steps, but this setting was not respected when submodules were present, allowing credentials to persist in git config. `clean-git-credentials: true` resolves this.
+
+**`tracker-id:`** — Correlate workflow runs with external tracking systems (e.g., Jira, Linear). The `tracker-id` field is included in activation metadata, making it easy to link agent run records to external issue IDs:
+
+```yaml
+tracker-id: "JIRA-1234"
+```
 
 **`pre-steps:`** — Inject steps that run _before_ checkout and the agent, inside the same job. Recommended for token-minting actions (e.g., `actions/create-github-app-token`, `octo-sts`) for cross-repo checkout. The minted token stays in the same job, avoiding the masking issue when crossing job boundaries.
 

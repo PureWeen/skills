@@ -352,6 +352,10 @@ Safe outputs enforce security through separation: agents run read-only and reque
 - `allowed-events: [COMMENT]` — On `submit-pull-request-review`, blocks agent from approving PRs (bypasses branch protection). **Always use this** for review workflows.
 - **Stale review limitation**: Prefer `allowed-events: [COMMENT]` unless you need the "Changes requested" badge. `REQUEST_CHANGES` reviews from `github-actions[bot]` cannot be dismissed by the agent (no `dismiss-pull-request-review` safe output, `pull-requests: write` rejected by compiler). A stale blocking review persists until a human dismisses it manually.
 
+**`push-to-pull-request-branch` notable options:**
+- Documented as **append-only** — commits are always added, never force-pushed
+- **Auto-linearizes merge commits** before a signed push, preventing push failures on branches with merge history. No workflow configuration change needed; this is applied automatically.
+
 **`add-comment` notable options:**
 - `hide-older-comments: true` — Collapse previous comments from same workflow
 - `max: N` — Limit comments per run (default: 1)
@@ -372,6 +376,7 @@ Safe outputs enforce security through separation: agents run read-only and reque
 | `pull_request` trigger causes "Approve and run" gate | The button approves ALL gated workflows with a single click — no per-workflow granularity, no diff preview | Prefer `slash_command:` or `schedule` over `pull_request`; assume the gate will always be clicked |
 | `--allow-all-tools` in lock.yml | Emitted by `gh aw compile` | Cannot override from `.md` source |
 | `gh` CLI inside agent | Credentials scrubbed | Use `steps:` for API calls, or MCP tools |
+| `network.allowed: [github]` domain scope | Includes `*.github.com`, `*.githubusercontent.com`, `github.com`, and related CDNs — `patch-diff.githubusercontent.com` is included, so workflows using `network.allowed: [github]` can fetch PR patch diffs directly without adding custom allowances |
 | `issue_comment` trigger | Requires workflow on default branch | Must merge to `main` before `/slash-commands` work |
 | Duplicate runs | gh-aw sometimes creates 2 runs per dispatch | Harmless, use concurrency groups |
 | Actions not pinned to SHA (regression v0.68.3–v0.69.x) | `gh aw compile` stopped pinning actions to commit SHA hashes | Fixed in v0.70.0 — recompile any workflows compiled with v0.68.3–v0.69.x |
