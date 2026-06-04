@@ -79,7 +79,7 @@ To **allow fork PRs**, add `forks: ["*"]` to the `pull_request` trigger in the `
 
 | Layer | What it does | What it doesn't do |
 |-------|-------------|-------------------|
-| **AWF network firewall** | Restricts outbound to allowlisted domains | Doesn't prevent reading env vars inside the container |
+| **AWF network firewall** | Restricts outbound to allowlisted domains. `network.allowed: [github]` covers the full GitHub domain ecosystem including `patch-diff.githubusercontent.com` (PR diffs — added in v0.74.8) | Doesn't prevent reading env vars inside the container |
 | **`redact_secrets.cjs`** | Scrubs known secret values from logs/artifacts post-agent | Doesn't catch encoded/obfuscated values |
 | **Threat detection agent** | Reviews agent outputs before safe-outputs publishes them | Can miss novel exfiltration techniques |
 | **Safe-outputs permission separation** | Write operations happen in separate job, not the agent | Agent can still request writes via safe-output tools |
@@ -340,6 +340,11 @@ Safe outputs enforce security through separation: agents run read-only and reque
 | **Custom** | `jobs:` (custom post-processing with MCP tool access), `actions:` (GitHub Action wrappers) |
 
 ### Key Safe Output Features
+
+**`push-to-pull-request-branch` notable options:**
+- **Append-only**: This safe output is designed for append-only commits — it does not rewrite branch history.
+- **Merge commit auto-linearization**: Before a signed push, the runtime automatically linearizes any merge commits in the branch, preventing push failures on branches with merge history. No workflow-author action needed.
+- `protected-files:` — Same options as `create-pull-request` (blocked/fallback-to-issue/allowed)
 
 **`create-pull-request` notable options:**
 - `draft: true` — Enforced as policy (agent cannot override)

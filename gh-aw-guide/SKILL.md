@@ -22,6 +22,7 @@ gh aw trial ./<name>.md --clone-repo owner/repo  # Test before merging to main
 gh aw lint                    # Validate .lock.yml without recompile
 gh aw audit <run-id>          # Analyze a completed run
 gh aw compile --approve       # Approve safe-update manifest changes (also on `run`, `upgrade`)
+gh aw replay <run-id>         # Render and stream unified timeline logs in terminal for post-run analysis
 ```
 
 `.lock.yml` is auto-generated — **never edit manually**. On merge conflict, resolve in the source `.md`, accept either side for `.lock.yml`, then `gh aw compile` to regenerate. For deprecated flags, see [`references/migrations.md`](references/migrations.md). Full CLI reference: `gh aw --help`.
@@ -32,7 +33,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-05-22 against gh-aw v0.74.4):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-06-04 against gh-aw v0.77.5):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -98,7 +99,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-05-22 against gh-aw v0.74.4 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-06-04 against gh-aw v0.77.5 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -442,6 +443,18 @@ checkout:
 
 For exhaustive frontmatter reference (`source:`, `private:`, `resources:`, `labels:`, `runtimes:`, `imports:`, `engine.*`, etc.), see [github/gh-aw frontmatter docs](https://github.github.com/gh-aw/reference/frontmatter/).
 
+**`tracker-id:`** — Correlate workflow runs with external tracking systems. Set a stable identifier (e.g., Jira ticket, Linear issue) to link agent runs to work items in dashboards or audit reports:
+
+```yaml
+tracker-id: "PROJ-1234"
+```
+
+**`project-utc-offset:`** — Configure a project-level UTC offset (in hours) so that rendered timestamps and expiration messages display correctly for teams in a specific timezone. Without this, timestamps display in UTC:
+
+```yaml
+project-utc-offset: -5   # UTC-5 (US Eastern Standard Time)
+```
+
 ## Safe Outputs You May Not Know About
 
 The official safe-outputs reference covers 30+ output types — the ones below are commonly missed even though they materially change workflow design:
@@ -450,6 +463,7 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 - **`upload-artifact:`** — Upload files as run-scoped GitHub Actions artifacts (configured via `max-uploads:` not `max:`). Prefer over `upload-asset:` for most cases.
 - **`dispatch_repository:`** *(experimental)* — Trigger `repository_dispatch` in **external** repositories. **Audit carefully:** pairing with `roles: all` lets untrusted triggers reach other repos.
 - **Custom safe-output `jobs:` and `actions:`** — Register post-processing jobs as MCP tools (`safe-outputs.jobs:`) or mount any public GitHub Action as an agent-callable tool (`safe-outputs.actions:`).
+- **Inline skills** — Define and run skills inline within a workflow (using the same syntax as inline sub-agents), without requiring a separate skill file. Useful for self-contained workflows that don't need cross-workflow skill sharing.
 - **`add-comment.discussions: false`** — Opts the workflow out of `discussions:write` permission. **Set this when the workflow only comments on issues/PRs** — otherwise the safe-outputs job carries an unnecessary write scope.
 - **`add-comment.allowed-mentions:`** — Permit specific `@team` or `@user` mentions (others are escaped). The author of the parent issue/PR/discussion is auto-preserved.
 

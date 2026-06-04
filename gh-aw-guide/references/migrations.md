@@ -18,6 +18,17 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
 
+### Fixed in v0.77.5
+- **Daily ET guardrail requires explicit configuration** — The daily effective-workflow (ET) guardrail and its `@actions/artifact` client setup are now only activated when explicitly configured, preventing unnecessary overhead in workflows that do not use this feature. Previously, the guardrail could be activated without explicit opt-in. If you rely on the ET guardrail, verify it is explicitly enabled in your workflow configuration.
+
+### Fixed in v0.76.1
+- **`push_to_pull_request_branch` merge commit failures** — Branches with merge history caused signed-push failures. The runtime now auto-linearizes merge commits before the signed push. No workflow-author change needed; the fix is automatic on current gh-aw versions.
+
+### Fixed in v0.74.8
+- **`patch-diff.githubusercontent.com` blocked by `network.allowed: [github]`** — Workflows using `network.allowed: [github]` could not fetch PR diffs because `patch-diff.githubusercontent.com` was not included in the GitHub domain ecosystem. Now included automatically — no workflow change needed.
+- **Validation errors lacked file/line context** — Compiler validation errors now include `file:line:col:` positioning, allowing IDE tooling to jump directly to the problematic field. Previously, errors required a manual search through the workflow file.
+- **Typos in engine names/events surfaced no suggestions** — Validation errors for misspelled engine names, events, permissions, or MCP types now include fuzzy "Did you mean?" suggestions using Levenshtein distance matching.
+
 ### Fixed in v0.74.4
 - **Submodule credential leak** — Compiled lock files using `persist-credentials: false` on checkout steps failed to scrub credentials when submodules were present. New `checkout.clean-git-credentials: true` option explicitly removes git credentials post-checkout. Workflows with submodules should add this option and recompile.
 - **`add_comment` allowed-mentions ignored** — The `allowed-mentions` config was not being passed through to the safe-outputs layer, causing all mentions to be escaped. Now correctly applied.
