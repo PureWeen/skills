@@ -46,6 +46,8 @@ pre-agent-steps:
 
 **`post-steps:`** run after the agent completes but before safe-outputs. Use these for cleanup, metrics, or post-processing.
 
+**Reasoning message rendering in logs.** Agent "thinking" output — Claude extended thinking blocks, Codex `thinking` sections, Copilot `reasoning_text` — renders in the parsed log artifacts with a distinct `◯` open-circle icon and italic styling, so the agent's reasoning is visually separable from regular tool/output messages when triaging a run.
+
 ### OpenTelemetry / OTLP Observability Flow
 
 `observability.otlp` is the author-facing contract for distributed tracing. The compiler normalizes the endpoint field into an ordered endpoint list (string, object, or array forms) and injects workflow-level OTLP environment variables when at least one endpoint is configured.
