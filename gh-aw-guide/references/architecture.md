@@ -46,6 +46,23 @@ pre-agent-steps:
 
 **`post-steps:`** run after the agent completes but before safe-outputs. Use these for cleanup, metrics, or post-processing.
 
+### OpenTelemetry / OTLP Observability Flow
+
+`observability.otlp` is the author-facing contract for distributed tracing. The compiler normalizes the endpoint field into an ordered endpoint list (string, object, or array forms) and injects workflow-level OTLP environment variables when at least one endpoint is configured.
+
+| Surface | Behavior to verify |
+|---------|--------------------|
+| Frontmatter | `endpoint`, `headers`, `if-missing`, and `attributes` live under `observability.otlp`. Top-level headers apply only to string endpoints; object/array endpoints use per-endpoint headers. |
+| Network | Static collector hosts are appended to the network allowlist. Endpoints hidden behind `${{ secrets.* }}` / expressions are not statically discoverable, so the workflow must otherwise allow the collector host. |
+| Runtime env | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `GH_AW_OTLP_ENDPOINTS`, and Copilot's file exporter path are injected for downstream steps. `OTEL_EXPORTER_OTLP_HEADERS` is injected only when the primary endpoint has non-empty headers; `GH_AW_OTLP_ALL_HEADERS` only when more than one endpoint is configured and at least one has headers; `GH_AW_OTLP_IF_MISSING` only when `if-missing` is `warn`/`ignore`; `GH_AW_OTLP_ATTRIBUTES` only when attributes are set. |
+| Child SDK correlation | Compiled workflows with an OTLP endpoint also inject `OTEL_RESOURCE_ATTRIBUTES` so child OpenTelemetry SDKs inherit gh-aw correlation keys such as workflow name, repository, run ID, and engine ID. |
+| MCP gateway | The generated gateway config receives `endpoint`, `traceId`, and `spanId` only. OTLP auth headers are forwarded as the `OTEL_EXPORTER_OTLP_HEADERS` container env var, not embedded in the gateway JSON config pipe. |
+| Artifacts | gh-aw mirrors helper spans to `/tmp/gh-aw/otel.jsonl` and Copilot CLI spans to `/tmp/gh-aw/copilot-otel.jsonl`; when OTLP is enabled, these are uploaded in the `agent` artifact for debugging. |
+
+Trace IDs are 32-character lowercase hex OpenTelemetry trace IDs, not GitHub run IDs or legacy `workflow_call_id` strings. Parent/child workflow correlation flows through `aw_context` (`otel_trace_id`, `otel_parent_span_id`, episode/hop identifiers), so `workflow_call` / dispatch chains can appear as one connected trace when callers preserve `aw_context`.
+
+Custom shared imports should use `/tmp/gh-aw/actions/otlp.cjs` rather than bespoke `curl` calls. The helper mirrors sanitized spans locally, redacts attributes whose keys look like secrets/tokens/auth credentials, truncates long string values, and treats export failures as non-fatal warnings.
+
 ### Prompt Rendering
 
 The prompt is built in the **activation job** via `{{#runtime-import .github/workflows/<name>.md}}`. This reads the `.md` file from the **base branch** workspace (before any PR checkout). The rendered prompt is uploaded as an artifact and downloaded by the agent job.
@@ -119,17 +136,18 @@ When `min-integrity` is omitted, the runtime's `determine-automatic-lockdown` st
 ### Protected Files (Auto-Enabled)
 
 When `create-pull-request` or `push-to-pull-request-branch` is configured, protected files are automatically enforced. The agent cannot modify:
-- Package manifests (`package.json`, `*.csproj` dependencies, etc.)
-- `.github/` directory contents
-- Agent instruction files
-- `.githooks/`, `.husky/` (hook directories) — added in v0.70.0
-- `DESIGN.md` — added in v0.70.0
+- Package manifests and lockfiles (`package.json`, `go.mod`, `pyproject.toml`, etc.)
+- `.github/`, `.agents/`, `.githooks/`, `.husky/`, and any top-level dot-directory
+- Agent instruction files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, etc.)
+- Root governance/docs such as `CODEOWNERS`, `DESIGN.md`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md`, and `CODE_OF_CONDUCT.md`
 
 Configure behavior with `protected-files:` on the safe output:
-- `blocked` (default) — PR creation fails if protected files are modified
-- `fallback-to-issue` — PR branch is pushed but an issue is created instead for review
+- `request_review` (default) — create the PR and submit a `REQUEST_CHANGES` review listing protected files
+- `blocked` — hard-block: the safe output fails if protected files are modified
+- `fallback-to-issue` — skip pushing and create a review issue with patch/download instructions
   - `fallback-labels: ["needs-review"]` — Optional custom labels on the fallback issue (v0.70.0+)
 - `allowed` — Disables protection (use with caution)
+- Object form `{ policy, exclude }` — keep the policy but exclude specific basenames or path prefixes when a workflow intentionally manages one protected file/directory.
 
 ### Rules for gh-aw Workflow Authors
 

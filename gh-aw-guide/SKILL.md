@@ -21,6 +21,9 @@ gh aw run <name> --ref main   # Trigger a workflow_dispatch run on a branch
 gh aw trial ./<name>.md --clone-repo owner/repo  # Test before merging to main
 gh aw lint                    # Validate .lock.yml without recompile
 gh aw audit <run-id>          # Analyze a completed run
+gh aw replay <run-id-or-url>  # Render a unified timeline from run artifacts/logs
+gh aw logs --format markdown  # Cross-run audit/trend report
+gh aw fix --write             # Apply supported source migrations
 gh aw compile --approve       # Approve safe-update manifest changes (also on `run`, `upgrade`)
 ```
 
@@ -32,7 +35,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-05-22 against gh-aw v0.74.4):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-06-04 against gh-aw v0.77.5):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -98,7 +101,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-05-22 against gh-aw v0.74.4 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-06-01 against gh-aw v0.77.5 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -221,6 +224,19 @@ steps:
 
 Manual triggers should bypass the gate. Use step outputs rather than `exit 1` — failing the job normalizes failures and masks real errors.
 
+### Documentation Maintenance Workflows
+
+Upstream's stable documentation-maintenance workflows (`glossary-maintainer`, `daily-doc-updater`, `daily-doc-healer`, `unbloat-docs`) are useful review exemplars. They do not introduce new runtime semantics; use them as pattern guidance when reviewing glossary, documentation updater, or docs cleanup workflows:
+
+| Pattern | Review check |
+|---|---|
+| Bounded scan scope | Scheduled docs/glossary agents should prefetch a bounded window, cache processed work, and cap detailed PR/commit reads. Avoid prompts that tell the agent to scan the whole repo every run. |
+| Deterministic preflight | Use `steps:` or `pre-agent-steps:` to gather candidate commits, issues, or docs files into `/tmp/gh-aw/agent/*`, then instruct the agent to consume those files instead of re-querying blindly. |
+| Documentation-only scope | Constrain candidate terms or edits to user-facing docs and code changes. Glossary workflows should ignore generic terms, internal-only implementation details, and issue discussion terminology unless corroborated by docs/commits/PRs. |
+| Safe write path | Prefer `create-pull-request` with short `expires`, doc labels/title prefix, and `protected-files: fallback-to-issue` for broad docs updaters. Use `noop` when no doc change is warranted. |
+| Least privilege | Keep frontmatter `permissions:` read-only and let safe-outputs own writes. Scope GitHub MCP `toolsets`, use `min-integrity: approved` when reading community content, and avoid global repository search tools unless the task truly needs them. |
+| History-dependent scans | If the workflow relies on `git log --since` or weekly/daily commit windows, set `checkout.fetch-depth: 0`; shallow checkout makes the scan silently incomplete. |
+
 ### Fork PR Checkout (`workflow_dispatch`)
 
 For `workflow_dispatch` workflows that need to evaluate a PR branch, the platform's `checkout_pr_branch.cjs` is **skipped** — you must implement checkout manually. Required checklist:
@@ -335,14 +351,15 @@ tools:
 | `all` | `approved` | **Two-layer defense.** Any actor triggers, but agent only sees trusted content |
 | `all` | `none` | **Widest exposure.** Must pair with minimal `safe-outputs:` — only remaining constraint |
 
-**4. CI triggering + protected file safety** — `GITHUB_TOKEN` pushes don't trigger CI; a PAT/App token is required. `protected-files` controls what happens when the agent modifies package manifests or `.github/`:
+**4. CI triggering + protected file safety** — `GITHUB_TOKEN` pushes don't trigger CI; a PAT/App token is required. `protected-files` controls what happens when the agent modifies package manifests, top-level dot-directories, root governance docs, or `.github/`:
 
 ```yaml
 safe-outputs:
   create-pull-request:
     github-token-for-extra-empty-commit: ${{ secrets.PAT_OR_APP_TOKEN }}  # Required to trigger CI
-    protected-files: fallback-to-issue   # Create issue instead of failing if agent touches .github/ or package manifests
-    # protected-files: blocked (default) | allowed (disables protection)
+    protected-files: request_review      # Default: create PR + REQUEST_CHANGES review listing protected files
+    # protected-files: blocked | fallback-to-issue | allowed (disables protection)
+    # object form supports policy + exclude list
 ```
 
 **5. Fork PR checkout for `workflow_dispatch`** — see the [Fork PR Checkout](#fork-pr-checkout-workflow_dispatch) pattern above. The platform's `checkout_pr_branch.cjs` is skipped for `workflow_dispatch`, so manual restoration of `.github/` from base is required.
@@ -425,6 +442,30 @@ gh-aw provides `lock-for-agent: true` to automatically lock/unlock the issue dur
 3. **Limit the agent job to agent-suitable work.** Keep filtering/skipping in pre-agent steps. Execute deterministic scripts before and after the agent job.
 4. **Apply least privilege on every dimension.** Minimum `permissions:`, `safe-outputs:`, `network.allowed:`, secrets, `tools:`. The agent sandbox limits the write surface (prevents process escape) but does not neutralise prompt injection — untrusted input must still be treated as adversarial. The same operation in pre/post-agent steps runs on the runner host with full secret access.
 
+## Engine & Runtime Updates
+
+**Current engines:** `copilot` (default), `claude`, `codex`, `antigravity`, `gemini` (deprecated but still functional), `crush`, `opencode`, and `pi`. `engine: gemini` now emits a non-fatal deprecation warning that points authors to `engine: antigravity`; don't rewrite existing Gemini workflows blindly unless you've also updated secrets and runtime assumptions (`ANTIGRAVITY_API_KEY` vs `GEMINI_API_KEY`).
+
+**Claude permission mode:** `engine.permission-mode` is first-class and can be `auto`, `acceptEdits`, `plan`, or `bypassPermissions`. gh-aw no longer derives `bypassPermissions` implicitly from unrestricted bash. In `bypassPermissions`, Claude's `--allowed-tools` is not an effective boundary; rely on MCP gateway `allowed:` filters and tight `tools:`.
+
+```yaml
+engine:
+  id: claude
+  permission-mode: auto
+```
+
+**Copilot inference via `github.token`:** The old `features.copilot-requests` flag migrated to an explicit permission. Use `gh aw fix --write` on old workflows, then verify the compiled lock file:
+
+```yaml
+permissions:
+  contents: read
+  copilot-requests: write
+```
+
+**Effective-token guardrails:** `max-effective-tokens` defaults to `25000000`; warnings are injected near 80/90/95/99% of budget. Use `K`/`M` suffixes (e.g., `100M`) or a negative value to disable. `max-daily-effective-tokens` adds a disabled-by-default 24-hour per-workflow, per-triggering-user cap; when exceeded, activation skips the agent and reports specialized failure context.
+
+**Provider/auth knobs:** Copilot supports `engine.copilot-sdk: true` for SDK sidecar workflows. Claude supports Anthropic WIF through `engine.auth.provider: anthropic` plus `federation-rule-id`, `organization-id`, `service-account-id`, and `workspace-id`. BYOK Azure/OpenAI deployments can disable AWF model-name rewriting with `sandbox.agent.model-fallback: false`; API gateways that require nonstandard headers can set `sandbox.agent.targets.<provider>.authHeader`.
+
 ## Frontmatter Features (Selected)
 
 **`on.needs:`** — Express dependencies on custom `pre_activation`/`activation` jobs, enabling GitHub App credentials to be sourced from upstream job outputs. See also `safe-outputs.needs` for credential-supply dependencies in the safe-outputs job.
@@ -440,7 +481,47 @@ checkout:
 
 **`pre-steps:`** — Inject steps that run _before_ checkout and the agent, inside the same job. Recommended for token-minting actions (e.g., `actions/create-github-app-token`, `octo-sts`) for cross-repo checkout. The minted token stays in the same job, avoiding the masking issue when crossing job boundaries.
 
+**`run-name:` / `runs-on:` / `runs-on-slim:`** — `runs-on` applies to the main agent job; `runs-on-slim` applies to generated framework jobs (`activation`, `safe_outputs`, unlock, etc.). `safe-outputs.runs-on` overrides `runs-on-slim` for safe-output jobs.
+
+**`redirect:`** — Workflow authors can move/rename a published workflow and have `gh aw add`, `add-wizard`, and `update` follow the new location. Use `gh aw update --no-redirect` when auditing or when redirects should fail closed.
+
+**`tracker-id:`** — Adds hidden `<!-- gh-aw-tracker-id: ... -->` markers to workflow-created issues, PRs, discussions, and comments so operators can search for all assets associated with a workflow.
+
+**Project UTC offset:** `.github/workflows/aw.json` can set `{ "utc": "-08:00" }`; `GH_AW_DEFAULT_UTC` is the enterprise fallback. This affects rendered timestamps and expiration messages, not scheduling.
+
+**`tools.github.allowed-repos: current`** — Use this in reusable workflows to scope the GitHub MCP guard policy to the repository where the workflow is running without hard-coding `owner/repo`.
+
+**`network.allowed-input: true`** — Reusable `workflow_call` workflows can expose a `network_allowed` input so callers can union extra domains/ecosystems into the compiled baseline allowlist. Keep the source workflow's baseline least-privileged.
+
+**Inline skills:** Workflow markdown can define engine-native skills inline using `## skill: \`name\`` blocks, parallel to inline sub-agents. The compiler extracts them out of the main prompt and materializes them into the engine-specific skill directory at runtime.
+
 For exhaustive frontmatter reference (`source:`, `private:`, `resources:`, `labels:`, `runtimes:`, `imports:`, `engine.*`, etc.), see [github/gh-aw frontmatter docs](https://github.github.com/gh-aw/reference/frontmatter/).
+
+## OpenTelemetry / OTLP Observability
+
+Use `observability.otlp` instead of hand-rolled telemetry scripts when a workflow needs distributed traces:
+
+```yaml
+observability:
+  otlp:
+    endpoint:
+      - url: ${{ secrets.OTLP_ENDPOINT_PRIMARY }}
+        headers:
+          Authorization: ${{ secrets.OTLP_TOKEN_PRIMARY }}
+      - url: ${{ secrets.OTLP_ENDPOINT_BACKUP }}
+    if-missing: warn
+    attributes:
+      langfuse.session.id: ${{ github.run_id }}
+      langfuse.user.id: ${{ github.actor }}
+```
+
+**Review checks:**
+- `endpoint` accepts a string, a single `{url, headers}` object, or an array of endpoint objects for fan-out. Top-level `headers:` only applies to string endpoints; object/array endpoints should carry per-endpoint headers.
+- `if-missing` can be `error` (default), `warn`, or `ignore`. It controls OTLP-dependent MCP gateway setup; it is not a general "skip all telemetry" switch.
+- Static endpoint hosts are automatically added to the network allowlist. Secret/expression endpoints are not statically resolvable, so ensure the collector host is otherwise allowed.
+- `attributes:` adds custom span attributes to gh-aw job spans. Non-empty values are masked from runner logs; still avoid putting secrets or high-cardinality/raw user payloads in attributes.
+- OTLP headers are passed via `OTEL_EXPORTER_OTLP_HEADERS` for the primary endpoint; multi-endpoint configurations also use `GH_AW_OTLP_ALL_HEADERS` so all endpoint headers are covered by masking/header handling. The MCP gateway config only receives endpoint/trace IDs. Do **not** embed collector credentials in custom gateway JSON, shell traces, or checked-in imports.
+- Custom imports can emit spans with `/tmp/gh-aw/actions/otlp.cjs`; export failures are non-fatal and mirrored to `/tmp/gh-aw/otel.jsonl`. Treat `otel.jsonl` / `copilot-otel.jsonl` artifacts as observability data, not as content to paste into public docs.
 
 ## Safe Outputs You May Not Know About
 
@@ -452,6 +533,10 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 - **Custom safe-output `jobs:` and `actions:`** — Register post-processing jobs as MCP tools (`safe-outputs.jobs:`) or mount any public GitHub Action as an agent-callable tool (`safe-outputs.actions:`).
 - **`add-comment.discussions: false`** — Opts the workflow out of `discussions:write` permission. **Set this when the workflow only comments on issues/PRs** — otherwise the safe-outputs job carries an unnecessary write scope.
 - **`add-comment.allowed-mentions:`** — Permit specific `@team` or `@user` mentions (others are escaped). The author of the parent issue/PR/discussion is auto-preserved.
+- **`create-pull-request` / `push-to-pull-request-branch` protected-file policies:** Default is `request_review` (PR is preserved, plus a `REQUEST_CHANGES` review). Use `blocked` to fail closed, `fallback-to-issue` to avoid pushing and create a review issue, or object form `{ policy, exclude }` when a workflow intentionally edits a specific protected file.
+- **`allowed-files:`** — Exclusive allowlist for code-push safe outputs. It is not an "extra allow" list; files outside the list are refused even if normally unprotected. To modify protected files, the path must match `allowed-files` and `protected-files` must allow it.
+- **`allow-workflows: true`** — Required when a code-push safe output is allowed to modify `.github/workflows/**`; requires `safe-outputs.github-app` because `workflows: write` is GitHub App-only.
+- **`push-to-pull-request-branch` cross-repo:** `target-repo` requires checking out the target repository with a distinct `path:`. The safe-output handler now respects `target-repo` across handlers; don't assume root workspace is the target repo.
 
 ### Issue / Comment Lifecycle Options (often missed)
 
@@ -465,6 +550,10 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 
 **NFKC normalization + homoglyph detection** — SafeOutputs detects Unicode homoglyph attacks (e.g., Cyrillic characters disguised as Latin) via NFKC normalization and homoglyph character mapping, preventing safe-output key spoofing.
 
+**Safe-output file-reference hardening** — Safe-output MCP tool calls reject `@filepath` local-file references. Agents must pass explicit structured arguments or uploaded artifact/asset references; don't rely on local runner paths surviving into safe-output execution.
+
+**Validation ergonomics:** Compiler/validation errors include `file:line:col` context and fuzzy "Did you mean?" suggestions for common typos in engine names, events, permission scopes, and MCP tool types.
+
 ## Breaking Changes & Migrations
 
 Deprecated frontmatter fields are rejected by the compiler. Run `gh aw fix --write` to auto-fix supported patterns. Some migrations (e.g., `cli-proxy`, `.mcp.json`) require manual edits — see [`references/migrations.md`](references/migrations.md) for the full table and version-pinned bug history.
@@ -475,5 +564,7 @@ Supported runtimes: `node`, `python`, `go`, `uv`, `bun`, `deno`, `ruby`, `java`,
 
 - **Execution model, fork handling, threat model, troubleshooting** — [`references/architecture.md`](references/architecture.md)
 - **Version-pinned bug history and migration commands** — [`references/migrations.md`](references/migrations.md)
+- **Unreleased/main-branch watchlist** — [`references/watchlist.md`](references/watchlist.md) (not stable behavior)
+- **Official OpenTelemetry reference** — [`gh-aw OpenTelemetry docs`](https://github.github.com/gh-aw/reference/open-telemetry/)
 - **Canonical schema reference** — [`github/gh-aw/.github/aw/`](https://github.com/github/gh-aw/tree/main/.github/aw/) (usually not installed locally — fetch directly when needed)
 - **Official user-facing docs** — [`gh.io/gh-aw`](https://gh.io/gh-aw)

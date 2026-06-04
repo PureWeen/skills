@@ -145,8 +145,8 @@ function Test-Workflow {
             file     = $name
             severity = "LOW"
             rule     = "code-push-no-protected-files"
-            message  = "Code push safe-output without explicit protected-files policy. Default is 'blocked' which is safe but may cause unexpected failures."
-            fix      = "Add protected-files: fallback-to-issue (or blocked/allowed explicitly)"
+            message  = "Code push safe-output without explicit protected-files policy. Default is 'request_review' (safe), but reviewers should make the policy intentional."
+            fix      = "Add protected-files: request_review, fallback-to-issue, blocked, or allowed explicitly"
         }
     }
 

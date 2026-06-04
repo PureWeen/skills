@@ -9,6 +9,7 @@ target: gh-aw-guide/SKILL.md
 secondary_targets:
   - gh-aw-guide/references/architecture.md
   - gh-aw-guide/references/migrations.md
+  - gh-aw-guide/references/watchlist.md
 
 # Sections containing local operational knowledge that didn't come from upstream
 # docs. The scraper will never suggest removing or rewriting these.
@@ -51,6 +52,14 @@ sources:
     sections: ["Common Patterns"]
   - url: https://github.github.com/gh-aw/reference/workflow-structure/
     sections: ["Architecture"]
+  - url: https://github.github.com/gh-aw/reference/open-telemetry/
+    sections: ["Architecture", "Additional Frontmatter Features"]
+  - url: https://raw.githubusercontent.com/github/gh-aw/main/specs/otel-observability-spec.md
+    sections: ["Architecture", "Additional Frontmatter Features"]
+  - url: https://raw.githubusercontent.com/github/gh-aw/main/docs/adr/32280-pass-otel-headers-as-container-env-var.md
+    sections: ["Architecture"]
+  - url: https://raw.githubusercontent.com/github/gh-aw/main/docs/adr/34450-inject-otel-resource-attributes-for-child-otel-sdk-correlation.md
+    sections: ["Architecture"]
 
   # Patterns (best practices that inform the anti-patterns table)
   - url: https://github.github.com/gh-aw/patterns/trial-ops/
@@ -59,6 +68,23 @@ sources:
     sections: ["Common Patterns", "Anti-Patterns"]
   - url: https://github.github.com/gh-aw/patterns/label-ops/
     sections: ["Common Patterns"]
+
+  # Stable workflow exemplars / watchlist sources. Track upstream main for drift,
+  # but never document changed behavior as current until it ships in stable release notes.
+  - url: https://raw.githubusercontent.com/github/gh-aw/main/.github/workflows/glossary-maintainer.md
+    sections: ["Common Patterns", "Watchlist"]
+  - url: https://raw.githubusercontent.com/github/gh-aw/main/.github/workflows/daily-doc-updater.md
+    sections: ["Common Patterns", "Watchlist"]
+  - url: https://raw.githubusercontent.com/github/gh-aw/main/.github/workflows/daily-doc-healer.md
+    sections: ["Common Patterns", "Watchlist"]
+  - url: https://raw.githubusercontent.com/github/gh-aw/main/.github/workflows/unbloat-docs.md
+    sections: ["Common Patterns", "Watchlist"]
+  - url: https://raw.githubusercontent.com/github/gh-aw/main/.github/workflows/shared/mcp/azure.md
+    sections: ["Watchlist"]
+  - url: https://raw.githubusercontent.com/github/gh-aw/main/.github/aw/imports/githubnext/agentics/d3422bf940923ef1d43db5559652b8e1e71869f3/workflows_shared_reporting.md
+    sections: ["Watchlist"]
+  - url: https://raw.githubusercontent.com/github/gh-aw/main/.github/aw/imports/githubnext/repo-mind-light-aw/ca993f50371e3fc138e672335bfc5879e60f3e98/.github_workflows_shared_repo-mind-light.md
+    sections: ["Watchlist"]
 
   # Tracked GitHub issues — check open/closed state.
   # resolution_expected: true means the issue is already incorporated into the
@@ -76,7 +102,7 @@ sources:
 
   # GitHub releases — check for new stable versions
   - releases: github/gh-aw
-    last_reviewed_release: v0.74.4
+    last_reviewed_release: v0.77.5
 
 style: |
   Match existing section structure. Use tables for feature comparisons.
