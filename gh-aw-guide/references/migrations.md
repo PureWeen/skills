@@ -15,10 +15,20 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 | `--safe-update` CLI flag | `--approve` | Update scripts/docs |
 | `features.copilot-requests: true` | `permissions.copilot-requests: write` | `gh aw fix --write` |
 | `tools.serena` | Remove; configure an MCP server explicitly if still needed | Manual edit |
+| `features.dangerously-disable-sandbox-agent: true` (boolean) | `features.dangerously-disable-sandbox-agent: "justification text ≥ 20 chars"` (string) | Manual edit |
+| `user-invokable:` in frontmatter | Remove entirely (Copilot-specific field; rejected by gh-aw validator) | Manual edit |
+| `disable-model-invocation:` in frontmatter | Remove entirely (Copilot-specific field; rejected by gh-aw validator) | Manual edit |
 
 ## Version-Specific Bug History
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
+
+### Fixed in v0.79.4
+- **`dangerously-disable-sandbox-agent` requires a string justification** — Boolean `true` (and any other non-string value) is now rejected by the compiler. Workflows must supply a literal plain-text justification string of at least 20 characters explaining why the trust boundary is being removed. The string is stored for audit. Update any workflow using the boolean form: `features.dangerously-disable-sandbox-agent: "your justification here"`.
+- **`user-invokable` and `disable-model-invocation` removed** — These Copilot-specific fields had no meaning in gh-aw and now produce a validation error. Remove them from any `.github/workflows/*.md` files.
+- **Milestone cache scoped per owner/repo** — `assign_milestone` no longer bleeds cached milestone lookups across repositories in multi-repo runs. Previously, milestones fetched for one repo could be misapplied in another repo within the same run.
+- **SHA-pinning for `setup-cli` in `steps:` workflows** — The emitted `setup-cli` step in `steps:` workflows now receives a SHA pin, matching the security posture of standard compiled workflows. Recompile affected workflows to pick up the fix.
+- **Failure-issue permission denials handled gracefully** — Workflows lacking `issues: write` no longer crash on failure reporting. Timeout-specific failure messages are now surfaced separately. No workflow changes required; upgrade the gh-aw runtime.
 
 ### Fixed in v0.77.5
 - **Daily effective-token guardrail setup overhead/failures** — `max-daily-effective-tokens` guardrail setup (including `@actions/artifact`) now runs only when explicitly configured, avoiding unnecessary activation work and missing-dependency failures on workflows that do not use the guardrail.

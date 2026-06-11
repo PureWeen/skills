@@ -35,7 +35,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-06-04 against gh-aw v0.77.5):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-06-10 against gh-aw v0.79.4):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -101,7 +101,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-06-01 against gh-aw v0.77.5 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-06-10 against gh-aw v0.79.4 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -495,6 +495,16 @@ checkout:
 
 **Inline skills:** Workflow markdown can define engine-native skills inline using `## skill: \`name\`` blocks, parallel to inline sub-agents. The compiler extracts them out of the main prompt and materializes them into the engine-specific skill directory at runtime.
 
+**`safe-outputs.timeout-minutes`** — The `safe_outputs` job timeout defaults to 45 minutes (raised in v0.79.4 from 30 minutes). Use `safe-outputs.timeout-minutes` to tune it per workflow:
+
+```yaml
+safe-outputs:
+  timeout-minutes: 60   # override safe_outputs job timeout (default: 45)
+  create-pull-request:
+```
+
+**`models:` (custom model pricing)** — Declare custom AIC cost tables for private or non-catalog models. The `models:` overlay merges over the built-in `models.json` at runtime; the main workflow's `models:` block takes precedence over imported overlays. Useful when BYOK deployments or enterprise-gated models are not in the public catalog. See the [cost-management reference](https://github.github.com/gh-aw/reference/cost-management/) for syntax details.
+
 For exhaustive frontmatter reference (`source:`, `private:`, `resources:`, `labels:`, `runtimes:`, `imports:`, `engine.*`, etc.), see [github/gh-aw frontmatter docs](https://github.github.com/gh-aw/reference/frontmatter/).
 
 ## OpenTelemetry / OTLP Observability
@@ -537,6 +547,15 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 - **`allowed-files:`** — Exclusive allowlist for code-push safe outputs. It is not an "extra allow" list; files outside the list are refused even if normally unprotected. To modify protected files, the path must match `allowed-files` and `protected-files` must allow it.
 - **`allow-workflows: true`** — Required when a code-push safe output is allowed to modify `.github/workflows/**`; requires `safe-outputs.github-app` because `workflows: write` is GitHub App-only.
 - **`push-to-pull-request-branch` cross-repo:** `target-repo` requires checking out the target repository with a distinct `path:`. The safe-output handler now respects `target-repo` across handlers; don't assume root workspace is the target repo.
+- **`create-check-run` with PR targeting** — By default, `create_check_run` attaches to the triggering commit SHA (no Pulls API call). Set `target: "triggering"` to resolve the current PR head SHA from the event context (adds `pull-requests: read` automatically), or `target: "*"` to let the agent supply `pull_request_number` per call. These options allow check runs to appear in the PR checks UI, not only on the commit.
+
+```yaml
+safe-outputs:
+  create-check-run:
+    name: "Security Analysis"
+    target: "triggering"   # attach to the triggering PR; auto-adds pull-requests: read
+    max: 1
+```
 
 ### Issue / Comment Lifecycle Options (often missed)
 
@@ -553,6 +572,22 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 **Safe-output file-reference hardening** — Safe-output MCP tool calls reject `@filepath` local-file references. Agents must pass explicit structured arguments or uploaded artifact/asset references; don't rely on local runner paths surviving into safe-output execution.
 
 **Validation ergonomics:** Compiler/validation errors include `file:line:col` context and fuzzy "Did you mean?" suggestions for common typos in engine names, events, permission scopes, and MCP tool types.
+
+**`dangerously-disable-sandbox-agent` requires a string justification** — Boolean `true` is no longer accepted by the compiler. To disable the agent sandbox, `features.dangerously-disable-sandbox-agent` must be a literal string of at least 20 characters explaining why the trust boundary is removed. Expressions and short strings are rejected:
+
+```yaml
+# ✅ Required form (v0.79.4+)
+features:
+  dangerously-disable-sandbox-agent: "controlled build environment, no external network"
+sandbox:
+  agent: false
+
+# ❌ Rejected — boolean no longer accepted
+features:
+  dangerously-disable-sandbox-agent: true
+```
+
+The justification string is stored for audit. Omitting it while setting `sandbox.agent: false` fails compilation.
 
 ## Breaking Changes & Migrations
 
