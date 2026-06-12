@@ -15,10 +15,23 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 | `--safe-update` CLI flag | `--approve` | Update scripts/docs |
 | `features.copilot-requests: true` | `permissions.copilot-requests: write` | `gh aw fix --write` |
 | `tools.serena` | Remove; configure an MCP server explicitly if still needed | Manual edit |
+| `dangerously-disable-sandbox-agent: true` | Replace with a plain-text justification string (≥ 20 characters) — boolean `true` is rejected as of v0.79.4 | Manual edit |
+| `user-invokable:` in frontmatter | Remove entirely — Copilot-specific field, not valid in gh-aw; produces a validation error as of v0.79.4 | Manual edit |
+| `disable-model-invocation:` in frontmatter | Remove entirely — Copilot-specific field, not valid in gh-aw; produces a validation error as of v0.79.4 | Manual edit |
 
 ## Version-Specific Bug History
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
+
+### Fixed in v0.79.6
+- **Windows CLI Deadlock Fixed** — A process wrapper deadlock in the Windows CLI integration was resolved. Workflows that stalled when spawning child processes on Windows runners should upgrade to unblock.
+- **Digest Pinning Restored** — Container image digest pinning for AWF firewall sidecar images was temporarily lost and has been restored. The release pipeline now gates on resolved SHA pins before pushing tags, ensuring supply chain integrity. Recompile workflows to pick up the latest pinned digests.
+- **AWF 0.27.2 Firewall Update** — The AWF firewall runtime was upgraded to 0.27.2, incorporating upstream security and stability fixes.
+
+### Fixed in v0.79.4
+- **Milestone cache scoped per owner/repo** — `assign_milestone` lookups no longer bleed across repositories in multi-repo runs. Previously, a cache miss in repo A could be satisfied by a stale entry from repo B.
+- **SHA-pinning for `setup-cli` in custom `steps:` workflows** — The emitted `setup-cli` step in `steps:` workflows now receives a SHA pin, closing a supply-chain gap between `steps:` workflows and standard compiled workflows.
+- **Failure-issue permission denials handled gracefully** — Workflows without `issues: write` no longer crash when filing failure reports. The failure reporter now skips issue creation gracefully and enforces timeout-specific failure messages separately.
 
 ### Fixed in v0.77.5
 - **Daily effective-token guardrail setup overhead/failures** — `max-daily-effective-tokens` guardrail setup (including `@actions/artifact`) now runs only when explicitly configured, avoiding unnecessary activation work and missing-dependency failures on workflows that do not use the guardrail.

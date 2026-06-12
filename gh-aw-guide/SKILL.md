@@ -35,7 +35,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-06-04 against gh-aw v0.77.5):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-06-11 against gh-aw v0.79.6):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -65,6 +65,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 | `slash_command:` without `events:` filter | `events: [pull_request_comment]` or `events: [issue_comment]` |
 | `cancel-in-progress: true` on `slash_command:` workflows | `cancel-in-progress: false` |
 | `pull_request` trigger for agentic workflows | `slash_command:`, `label_command:`, or `schedule` |
+| `dangerously-disable-sandbox-agent: true` | Use a string with ≥ 20-character justification (boolean `true` is rejected as of v0.79.4) |
 
 ## Common Patterns
 
@@ -101,7 +102,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-06-01 against gh-aw v0.77.5 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-06-11 against gh-aw v0.79.6 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -454,7 +455,7 @@ engine:
   permission-mode: auto
 ```
 
-**Copilot inference via `github.token`:** The old `features.copilot-requests` flag migrated to an explicit permission. Use `gh aw fix --write` on old workflows, then verify the compiled lock file:
+**Copilot inference via `github.token`:** `copilot-requests: write` is the recommended permission for any workflow that uses the Copilot engine or Copilot-based tools. The old `features.copilot-requests` flag was migrated to this permission — use `gh aw fix --write` on old workflows. For new Copilot-targeted workflows, declare it explicitly:
 
 ```yaml
 permissions:
@@ -463,6 +464,22 @@ permissions:
 ```
 
 **Effective-token guardrails:** `max-effective-tokens` defaults to `25000000`; warnings are injected near 80/90/95/99% of budget. Use `K`/`M` suffixes (e.g., `100M`) or a negative value to disable. `max-daily-effective-tokens` adds a disabled-by-default 24-hour per-workflow, per-triggering-user cap; when exceeded, activation skips the agent and reports specialized failure context.
+
+**`models:` — Custom model pricing:** Declare cost tables for private or non-catalog models directly in frontmatter. The overlay merges over the built-in `models.json` at runtime; main-workflow entries take precedence over imports. Use this when billing reports show `unknown` pricing for a custom/gateway-routed model or when using self-hosted models not in the gh-aw catalog:
+
+```yaml
+models:
+  my-custom-gpt4o:
+    input: 5.00   # cost per 1M input tokens (USD)
+    output: 15.00 # cost per 1M output tokens (USD)
+```
+
+**`safe-outputs.timeout-minutes:`** — Override the `safe_outputs` job timeout. The default was raised from 30 to **45 minutes** in v0.79.4. Use this to increase the cap for workflows with many safe-output operations, or decrease it to fail faster:
+
+```yaml
+safe-outputs:
+  timeout-minutes: 60   # raise for workflows with many operations
+```
 
 **Provider/auth knobs:** Copilot supports `engine.copilot-sdk: true` for SDK sidecar workflows. Claude supports Anthropic WIF through `engine.auth.provider: anthropic` plus `federation-rule-id`, `organization-id`, `service-account-id`, and `workspace-id`. BYOK Azure/OpenAI deployments can disable AWF model-name rewriting with `sandbox.agent.model-fallback: false`; API gateways that require nonstandard headers can set `sandbox.agent.targets.<provider>.authHeader`.
 
@@ -530,6 +547,7 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 - **`set-issue-type:` / `set-issue-field:`** — Set GitHub Issues type or any single field by name/value (default `max: 5`). Useful for triage workflows that classify issues without using labels.
 - **`upload-artifact:`** — Upload files as run-scoped GitHub Actions artifacts (configured via `max-uploads:` not `max:`). Prefer over `upload-asset:` for most cases.
 - **`dispatch_repository:`** *(experimental)* — Trigger `repository_dispatch` in **external** repositories. **Audit carefully:** pairing with `roles: all` lets untrusted triggers reach other repos.
+- **`create-check-run:`** — Create a GitHub check run attached to a commit or PR. Use `target: "pr"` to attach the check run to the triggering pull request, or `target: "*"` to attach to both the commit and PR (v0.79.4+). Default behavior attaches only to the commit.
 - **Custom safe-output `jobs:` and `actions:`** — Register post-processing jobs as MCP tools (`safe-outputs.jobs:`) or mount any public GitHub Action as an agent-callable tool (`safe-outputs.actions:`).
 - **`add-comment.discussions: false`** — Opts the workflow out of `discussions:write` permission. **Set this when the workflow only comments on issues/PRs** — otherwise the safe-outputs job carries an unnecessary write scope.
 - **`add-comment.allowed-mentions:`** — Permit specific `@team` or `@user` mentions (others are escaped). The author of the parent issue/PR/discussion is auto-preserved.
@@ -545,6 +563,12 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 - **`messages.append-only-comments: true`** — Disables the default behavior of editing the activation comment with final status; each run posts a fresh comment for an append-only timeline. Useful when audit-trail visibility matters more than UI tidiness.
 
 ## Security Hardening
+
+**`dangerously-disable-sandbox-agent:` requires string justification** — Boolean `true` is rejected as of v0.79.4. Any workflow using `dangerously-disable-sandbox-agent: true` must be updated to supply a plain-text justification string of at least 20 characters explaining why the trust boundary is being removed. See [`references/migrations.md`](references/migrations.md).
+
+```yaml
+dangerously-disable-sandbox-agent: "Required for local filesystem access — network traffic audited and team-approved"
+```
 
 **Token injection hardening** — Secrets are injected via `env:` blocks rather than inline `run:` interpolation. **The compiler (v0.74.4+) now automatically rewrites `${{ … }}` expressions inside `run:` blocks _and_ `safe_jobs:` step env vars** into `env:` bindings as part of compile — authors no longer need to manually rewrite expressions to clear the run-script guardrail; recompiling picks up the transform automatically. Older compiled lock files retain the manual form.
 
