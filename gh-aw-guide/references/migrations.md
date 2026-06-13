@@ -15,10 +15,24 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 | `--safe-update` CLI flag | `--approve` | Update scripts/docs |
 | `features.copilot-requests: true` | `permissions.copilot-requests: write` | `gh aw fix --write` |
 | `tools.serena` | Remove; configure an MCP server explicitly if still needed | Manual edit |
+| `dangerously-disable-sandbox-agent: true` (boolean) | `dangerously-disable-sandbox-agent: "static justification ≥ 20 chars"` (string) | Manual edit — must be a static literal, not an expression |
+| `user-invokable: true` in frontmatter | Remove entirely (field removed; produces validation error) | Manual edit |
+| `disable-model-invocation: true` in frontmatter | Remove entirely (field removed; produces validation error) | Manual edit |
 
 ## Version-Specific Bug History
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
+
+### Fixed in v0.79.6
+- **AWF firewall 0.27.2 + digest pinning restored** — The firewall runtime was upgraded to AWF 0.27.2. Container image digest pinning for the firewall sidecar was also restored; the release pipeline now gates on resolved SHA pins before pushing tags, ensuring supply chain integrity for the compiled workflow.
+- **Windows CLI deadlock resolved** — A process wrapper deadlock in the Windows CLI integration was fixed. This does not affect Linux runners.
+
+### Fixed in v0.79.4
+- **`dangerously-disable-sandbox-agent` requires string justification** — Boolean `true` is no longer accepted. Workflows must supply a plain-text literal reason (≥ 20 characters). Expressions (e.g., `${{ inputs.reason }}`) are also rejected. The string is stored in the lock file as a permanent audit record.
+- **`user-invokable` and `disable-model-invocation` removed from schema** — These Copilot-specific fields now produce a validation error. Remove them from any `.github/workflows/*.md` before recompiling.
+- **SHA-pinning for `setup-cli` in `steps:` workflows** — The emitted `setup-cli` step in `steps:`-based workflows now receives a SHA pin, aligning with the security posture of standard compiled workflows. No source change needed — recompile to pick up the pin.
+- **Milestone cache scoped per owner/repo** — `assign_milestone` lookups no longer bleed across repositories in multi-repo runs. Workflows that call `assign_milestone` in multi-repo contexts should recompile.
+- **Failure-issue permission denials handled gracefully** — Workflows lacking `issues: write` no longer crash on failure reporting; the failure issue step is now skipped rather than propagating an error. Timeout-specific failure messages are enforced separately.
 
 ### Fixed in v0.77.5
 - **Daily effective-token guardrail setup overhead/failures** — `max-daily-effective-tokens` guardrail setup (including `@actions/artifact`) now runs only when explicitly configured, avoiding unnecessary activation work and missing-dependency failures on workflows that do not use the guardrail.

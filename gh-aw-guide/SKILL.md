@@ -35,7 +35,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-06-04 against gh-aw v0.77.5):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-06-13 against gh-aw v0.79.6):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -101,7 +101,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-06-01 against gh-aw v0.77.5 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-06-13 against gh-aw v0.79.6 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -112,6 +112,7 @@ safe-outputs:
 > | `create-pull-request-review-comment` / `reply-to-pull-request-review-comment` / `resolve-pull-request-review-thread` | inline review items | 10 |
 > | `upload-asset` / `autofix-code-scanning-alert` | items | 10 |
 > | `dispatch-workflow` | dispatches (calls) | 1 |
+> | `create-check-run` | check runs (calls) | 1 |
 > | `set-issue-type` / `set-issue-field` | operations | 5 |
 > | `update-project` / `close-pull-request` | operations | 10 |
 > | `create-issue` / `update-issue` / `close-issue` | issues / updates / closures | 1 |
@@ -495,6 +496,26 @@ checkout:
 
 **Inline skills:** Workflow markdown can define engine-native skills inline using `## skill: \`name\`` blocks, parallel to inline sub-agents. The compiler extracts them out of the main prompt and materializes them into the engine-specific skill directory at runtime.
 
+**`models:` (custom model pricing)** — Declare per-model cost tables for private or non-catalog models. Overlays merge over the built-in `models.json` at runtime, with the main workflow taking precedence over imports. Use this when your org uses a self-hosted or private model catalog and the default AIC calculations are inaccurate:
+
+```yaml
+models:
+  my-private-gpt4:
+    input: 0.005       # cost per 1K input tokens (USD)
+    output: 0.015      # cost per 1K output tokens (USD)
+```
+
+<!-- reviewer: verify exact field names and units against https://github.github.com/gh-aw/reference/cost-management/ -->
+
+**`safe-outputs.timeout-minutes:`** — Override the timeout for the compiled `safe_outputs` job. The default was raised to 45 minutes. Use this to shorten for cost-sensitive workflows or extend for workflows with slow safe-output actions:
+
+```yaml
+safe-outputs:
+  timeout-minutes: 60   # extend for long-running post-processing jobs
+```
+
+<!-- reviewer: verify default value (release notes say 45 min) against https://github.github.com/gh-aw/reference/safe-outputs/ -->
+
 For exhaustive frontmatter reference (`source:`, `private:`, `resources:`, `labels:`, `runtimes:`, `imports:`, `engine.*`, etc.), see [github/gh-aw frontmatter docs](https://github.github.com/gh-aw/reference/frontmatter/).
 
 ## OpenTelemetry / OTLP Observability
@@ -537,6 +558,7 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 - **`allowed-files:`** — Exclusive allowlist for code-push safe outputs. It is not an "extra allow" list; files outside the list are refused even if normally unprotected. To modify protected files, the path must match `allowed-files` and `protected-files` must allow it.
 - **`allow-workflows: true`** — Required when a code-push safe output is allowed to modify `.github/workflows/**`; requires `safe-outputs.github-app` because `workflows: write` is GitHub App-only.
 - **`push-to-pull-request-branch` cross-repo:** `target-repo` requires checking out the target repository with a distinct `path:`. The safe-output handler now respects `target-repo` across handlers; don't assume root workspace is the target repo.
+- **`create-check-run` PR targeting:** The `target` field attaches the check run to a pull request in addition to the head commit. Options: omitted (resolves SHA from event payload — no Pulls API call), `"triggering"` (resolves PR from event context, fetches current head SHA via Pulls API), `"*"` (agent must supply `pull_request_number` in each call), or an explicit PR number expression. When `target` is set, the compiler auto-adds `pull-requests: read`.
 
 ### Issue / Comment Lifecycle Options (often missed)
 
@@ -557,6 +579,17 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 ## Breaking Changes & Migrations
 
 Deprecated frontmatter fields are rejected by the compiler. Run `gh aw fix --write` to auto-fix supported patterns. Some migrations (e.g., `cli-proxy`, `.mcp.json`) require manual edits — see [`references/migrations.md`](references/migrations.md) for the full table and version-pinned bug history.
+
+> 🛑 **`dangerously-disable-sandbox-agent: true` is no longer accepted.** Boolean `true` was previously a shorthand; the compiler now requires a **static string justification of at least 20 characters** explaining why the trust boundary is being removed. Expressions (e.g., `${{ inputs.reason }}`) are also rejected — the reason must be a literal value so it is permanently recorded in the lock file for audit:
+>
+> ```yaml
+> features:
+>   dangerously-disable-sandbox-agent: "controlled environment with no internet access"
+> sandbox:
+>   agent: false
+> ```
+
+> ⚠️ **`user-invokable` and `disable-model-invocation` removed.** These Copilot-specific fields have no meaning in gh-aw and now produce a validation error. Remove them from any `.github/workflows/*.md` files before recompiling.
 
 Supported runtimes: `node`, `python`, `go`, `uv`, `bun`, `deno`, `ruby`, `java`, `dotnet`, `elixir`.
 
