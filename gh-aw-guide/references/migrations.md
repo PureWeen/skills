@@ -15,10 +15,26 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 | `--safe-update` CLI flag | `--approve` | Update scripts/docs |
 | `features.copilot-requests: true` | `permissions.copilot-requests: write` | `gh aw fix --write` |
 | `tools.serena` | Remove; configure an MCP server explicitly if still needed | Manual edit |
+| `dangerously-disable-sandbox-agent: true` (Boolean) | String justification ≥ 20 chars (e.g., `"controlled environment with no internet access"`) explaining why the trust boundary is removed — expressions and short strings are rejected by the compiler | Manual edit |
+| `user-invokable: true` | Remove entirely — field no longer exists in gh-aw schema and will produce a validation error | Manual edit |
+| `disable-model-invocation: true` | Remove entirely — field no longer exists in gh-aw schema and will produce a validation error | Manual edit |
 
 ## Version-Specific Bug History
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
+
+### Fixed in v0.79.6
+- **Digest pinning restored** — Container image digest pinning for AWF firewall sidecar images has been restored after a brief regression. The release pipeline now gates on resolved SHA pins before pushing tags, ensuring supply chain integrity for AWF firewall images. No workflow change needed; the compiler picks this up automatically on recompile.
+- **AWF firewall security update** — The AWF firewall runtime was updated to incorporate upstream security and stability fixes. No workflow change needed.
+- **Windows CLI deadlock** — A process wrapper deadlock in the Windows `gh aw` CLI integration has been resolved, unblocking local development workflows that stalled when spawning child processes on Windows.
+
+### Fixed in v0.79.4
+- **`dangerously-disable-sandbox-agent` requires string justification** — Boolean `true` is no longer accepted. Workflows must supply a static literal string of at least 20 characters explaining why the trust boundary is removed (e.g., `"controlled environment with no internet access"`). Expressions and short strings are rejected by the compiler. Update any workflow using `dangerously-disable-sandbox-agent: true` to a descriptive justification string.
+- **`user-invokable` and `disable-model-invocation` removed** — These Copilot-specific fields have been removed from the gh-aw schema and now produce a validation error. Remove them from any `.github/workflows/*.md` frontmatter.
+- **Milestone cache scoped per owner/repo** — `assign_milestone` lookups in the `safe_outputs` job no longer bleed across repositories in multi-repo runs. No workflow change needed.
+- **SHA-pinning for `steps:` workflow setup-cli** — The emitted `setup-cli` step in `steps:`-based compiled workflows now receives a SHA pin, aligning supply chain security posture with standard compiled workflows. Recompile affected workflows to pick up the pin.
+- **Failure-issue permission denials handled gracefully** — Workflows that lack `issues: write` no longer crash during failure reporting; permission-denied responses are now caught and reported as non-fatal warnings.
+- **Timeout-specific failure messages** — Timeout failures now emit a distinct failure message separate from general failures, making timeout-caused run failures easier to diagnose in failure issues.
 
 ### Fixed in v0.77.5
 - **Daily effective-token guardrail setup overhead/failures** — `max-daily-effective-tokens` guardrail setup (including `@actions/artifact`) now runs only when explicitly configured, avoiding unnecessary activation work and missing-dependency failures on workflows that do not use the guardrail.

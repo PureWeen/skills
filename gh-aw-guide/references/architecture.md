@@ -104,7 +104,7 @@ To **allow fork PRs**, add `forks: ["*"]` to the `pull_request` trigger in the `
 | **Safe-outputs permission separation** | Write operations happen in separate job, not the agent | Agent can still request writes via safe-output tools |
 | **Integrity filtering** | Filters untrusted GitHub content before agent sees it (DIFC proxy) | Runtime auto-lockdown varies by event type — verify for sensitive workflows |
 | **Protected files** | Blocks agent from modifying package manifests, `.github/`, `.githooks/`, `.husky/`, `DESIGN.md`, etc. | Only applies to `create-pull-request` and `push-to-pull-request-branch` |
-| **Container image digest pinning** (v0.70.0+) | Lock files pin built-in container images by digest for reproducible, tamper-resistant execution | Only covers images managed by `gh aw compile` — custom containers are not auto-pinned |
+| **Container image digest pinning** (v0.70.0+) | Lock files pin built-in container images by digest for reproducible, tamper-resistant execution; AWF firewall sidecar images are also SHA-pinned and the release pipeline gates on resolved SHA pins before pushing tags | Only covers images managed by `gh aw compile` — custom containers are not auto-pinned |
 | **`max: N` on safe outputs** | Limits number of operations per type | That output could still contain sensitive data (mitigated by redaction) |
 | **XPIA prompt** | Instructs LLM to resist prompt injection from untrusted content (hardened v0.70.0) | LLM compliance is probabilistic, not guaranteed; `disable-xpia-prompt` rejected at compile in strict mode |
 | **`pre_activation` role check** | Gates on write-access collaborators | Does not apply if `roles: all` is set |
@@ -355,7 +355,7 @@ Safe outputs enforce security through separation: agents run read-only and reque
 | **Pull Requests** | `create-pull-request`, `update-pull-request`, `close-pull-request`, `create-pull-request-review-comment`, `reply-to-pull-request-review-comment`, `resolve-pull-request-review-thread`, `push-to-pull-request-branch`, `add-reviewer` |
 | **Labels & Assignments** | `add-comment`, `hide-comment`, `add-labels`, `remove-labels`, `assign-milestone`, `assign-to-agent`, `assign-to-user`, `unassign-from-user` |
 | **Projects & Releases** | `create-project`, `update-project`, `create-project-status-update`, `update-release`, `upload-asset` |
-| **Workflow & Security** | `dispatch-workflow`, `call-workflow`, `dispatch_repository`, `create-code-scanning-alert`, `autofix-code-scanning-alert`, `create-agent-session` |
+| **Workflow & Security** | `dispatch-workflow`, `call-workflow`, `dispatch_repository`, `create-code-scanning-alert`, `autofix-code-scanning-alert`, `create-check-run`, `create-agent-session` |
 | **System (auto-enabled)** | `noop`, `missing-tool`, `missing-data` |
 | **Custom** | `jobs:` (custom post-processing with MCP tool access), `actions:` (GitHub Action wrappers) |
 

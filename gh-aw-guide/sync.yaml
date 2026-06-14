@@ -102,7 +102,7 @@ sources:
 
   # GitHub releases — check for new stable versions
   - releases: github/gh-aw
-    last_reviewed_release: v0.77.5
+    last_reviewed_release: v0.79.6
 
 style: |
   Match existing section structure. Use tables for feature comparisons.
