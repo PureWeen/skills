@@ -37,6 +37,7 @@ These are bugs that were fixed. If you encounter them, upgrade to the version in
 
 ### Fixed in v0.79.6
 - **AWF firewall upgraded to 0.27.2** — Brings firewall fixes and policy improvements; review `network.allowed` allowlist behavior under the new firewall if you observe newly blocked/allowed hosts.
+- **AWF sidecar digest pinning restored** — Container image digest pinning for AWF 0.27.0 firewall sidecar images was missing in v0.79.4–v0.79.5; restored in v0.79.6. The release pipeline now gates on resolved SHA pins before pushing tags. Recompile any workflows compiled between v0.79.4 and v0.79.6 to pick up pinned digests.
 - **Go MCP server 4-process guardrail** — Child `gh` invocations spawned by the in-process Go MCP server are now capped at 4 concurrent processes to prevent runner exhaustion under high tool-call burst.
 - **Windows CLI process-wrapper deadlock** — Removed a deadlock when running `gh aw` on Windows shells that wrap child processes (affects local authoring only — Windows is not a supported runner).
 - **`gh-aw.aic` emitted as `doubleValue` on OTLP conclusion spans** — Span attribute is now numeric (was a string), enabling correct aggregation in OTLP backends.
@@ -51,7 +52,10 @@ These are bugs that were fixed. If you encounter them, upgrade to the version in
 - **`create-check-run.target: triggering | "*" | <explicit PR>`** — New PR-targeting field for the `create-check-run` safe output; defaults to `triggering` and always resolves the current PR head SHA via the Pulls API to survive force-pushes.
 - **`max-effective-tokens` → `max-ai-credits` rename (AIC terminology)** — The unit of cost reporting moved from "effective tokens" to AI Credits (1 AIC = $0.01 USD, sourced from models.dev). Defaults: 1000 AIC per run, 5000 AIC per 24-hour window (opt-in via `max-daily-ai-credits`). Threat-detection has its own 400 AIC default cap under `safe-outputs.threat-detection.max-ai-credits`. Codemod: `gh aw fix --write`.
 - **Steering messages emitted in unified log** — Budget-warning and steering messages now appear inline in the unified `gh aw replay` log alongside agent messages, instead of only in raw run output.
-- **Milestone cache scoping** — Milestone resolution caches are now scoped per repository so multi-repo workflows don't collide on milestone IDs.
+- **Milestone cache scoped per owner/repo** — Milestone lookups in `assign_milestone` previously bled across repositories in multi-repo runs (wrong milestone resolved for the target repo); now correctly scoped to the owner/repo pair.
+- **`setup-cli` SHA-pinning in `steps:` workflows** — The emitted `setup-cli` step inside custom `steps:` workflows now receives a SHA pin, matching the security posture of standard compiled workflows. Recompile any `steps:`-based workflows compiled before v0.79.4 to pick up the pinned reference.
+- **Failure-issue permission denials handled gracefully** — Workflows lacking `issues: write` no longer crash when filing failure reports; timeout-specific failure messages are enforced separately.
+- **AIC telemetry accuracy** — The `github_models` provider alias is recognised by AIC accounting; zero-AIC firewall proxy responses fall back to engine-reported values; AI credits propagate through the failure handler.
 - **Runtime CLI setup actions SHA-pinned** — Generated lock files now SHA-pin runtime setup actions (Node, Python, etc.) instead of using floating major refs.
 - **AIC telemetry across engines** — Copilot, Claude, Codex, and Codex-mini engines now emit consistent `gh-aw.aic`, `gh-aw.tokens.*`, and `gh-aw.model.*` OTLP attributes.
 
