@@ -15,10 +15,23 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 | `--safe-update` CLI flag | `--approve` | Update scripts/docs |
 | `features.copilot-requests: true` | `permissions.copilot-requests: write` | `gh aw fix --write` |
 | `tools.serena` | Remove; configure an MCP server explicitly if still needed | Manual edit |
+| `dangerously-disable-sandbox-agent: true` | `dangerously-disable-sandbox-agent: "descriptive reason ≥ 20 chars"` — boolean no longer accepted; compiler now requires a plain-text justification | Manual edit |
+| `user-invokable:` in `.github/workflows/*.md` | Remove entirely — field has no meaning in gh-aw and now causes a validation error | Manual edit |
+| `disable-model-invocation:` in `.github/workflows/*.md` | Remove entirely — field has no meaning in gh-aw and now causes a validation error | Manual edit |
 
 ## Version-Specific Bug History
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
+
+### Fixed in v0.79.6
+- **Digest pinning restored** — Container image digest pinning for AWF firewall sidecar images was missing; now restored, and the release pipeline gates on resolved SHA pins before pushing tags, ensuring supply chain integrity. If your locked workflows were compiled between v0.79.4 and v0.79.6, recompile to pick up pinned digests.
+- **AWF 0.27.2 firewall runtime** — Upgraded to AWF 0.27.2, incorporating upstream security and stability fixes for the network firewall sidecar.
+
+### Fixed in v0.79.4
+- **SHA-pinning for `setup-cli` in `steps:` workflows** — The emitted `setup-cli` step inside custom `steps:` workflows now receives a SHA pin, aligning with the security posture of standard compiled workflows. Recompile any `steps:`-based workflows to pick up the pinned reference.
+- **Milestone cache scoped per owner/repo** — Milestone lookups in `assign_milestone` previously bled across repositories in multi-repo runs (wrong milestone resolved for the target repo). Now properly scoped to the owner/repo pair.
+- **Failure-issue permission denials handled gracefully** — Workflows lacking `issues: write` no longer crash when filing failure reports; timeout-specific failure messages are enforced separately.
+- **AIC telemetry accuracy** — The `github_models` provider alias is recognised; zero-AIC firewall proxy responses fall back to engine-reported values; AI credits properly propagated through failure handler.
 
 ### Fixed in v0.77.5
 - **Daily effective-token guardrail setup overhead/failures** — `max-daily-effective-tokens` guardrail setup (including `@actions/artifact`) now runs only when explicitly configured, avoiding unnecessary activation work and missing-dependency failures on workflows that do not use the guardrail.

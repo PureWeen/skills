@@ -35,7 +35,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-06-04 against gh-aw v0.77.5):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-06-11 against gh-aw v0.79.6):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -65,6 +65,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 | `slash_command:` without `events:` filter | `events: [pull_request_comment]` or `events: [issue_comment]` |
 | `cancel-in-progress: true` on `slash_command:` workflows | `cancel-in-progress: false` |
 | `pull_request` trigger for agentic workflows | `slash_command:`, `label_command:`, or `schedule` |
+| Posting commit/PR status via manual `gh api` calls | `create-check-run` safe output (supports `target: "triggering"`, `"*"`, or an explicit PR number expression) |
 
 ## Common Patterns
 
@@ -101,7 +102,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-06-01 against gh-aw v0.77.5 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-06-11 against gh-aw v0.79.6 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -495,6 +496,32 @@ checkout:
 
 **Inline skills:** Workflow markdown can define engine-native skills inline using `## skill: \`name\`` blocks, parallel to inline sub-agents. The compiler extracts them out of the main prompt and materializes them into the engine-specific skill directory at runtime.
 
+**`models:` frontmatter (custom model pricing)** — Declare custom cost tables for private or non-catalog models directly in your workflow frontmatter. The table overlays merge over the built-in `models.json` at runtime with main-workflow precedence. Useful for BYOK deployments that use models not in the public catalog:
+
+```yaml
+models:
+  my-private-gpt4:
+    input_tokens_per_million: 10.0
+    output_tokens_per_million: 30.0
+```
+
+**`safe-outputs.timeout-minutes:`** — Configure the `safe_outputs` job timeout per workflow. The platform default was raised to 45 minutes; use this field when your workflows have unusually large safe-output payloads that exceed that window: <!-- verify: default of 45 min stated in v0.79.4 release notes; upstream reference docs may not yet reflect this -->
+
+```yaml
+safe-outputs:
+  timeout-minutes: 60   # Override the default 45-minute safe_outputs job timeout
+```
+
+**`dangerously-disable-sandbox-agent:` string justification** — Boolean `true` is no longer accepted. Workflows must supply a plain-text reason of ≥ 20 characters. Any workflow still using the boolean form will fail validation — see [`references/migrations.md`](references/migrations.md):
+
+```yaml
+# ❌ No longer accepted
+dangerously-disable-sandbox-agent: true
+
+# ✅ Required form
+dangerously-disable-sandbox-agent: "Required for legacy tooling that only runs outside the sandbox due to network constraints"
+```
+
 For exhaustive frontmatter reference (`source:`, `private:`, `resources:`, `labels:`, `runtimes:`, `imports:`, `engine.*`, etc.), see [github/gh-aw frontmatter docs](https://github.github.com/gh-aw/reference/frontmatter/).
 
 ## OpenTelemetry / OTLP Observability
@@ -527,6 +554,16 @@ observability:
 
 The official safe-outputs reference covers 30+ output types — the ones below are commonly missed even though they materially change workflow design:
 
+- **`create-check-run:`** — Creates a GitHub Check Run that surfaces agent analysis as a first-class status check on a commit or PR. Check Runs appear in the PR checks UI. Use `target: "triggering"` (default) for event-based triggers, `target: "*"` to also target PRs when no PR context is available (e.g., `workflow_dispatch`), or an explicit PR number expression. Prefer this over manual `gh api checks/runs` calls.
+
+  ```yaml
+  safe-outputs:
+    create-check-run:
+      name: "Security Analysis"   # check run name in the Checks UI (default: workflow name)
+      target: "*"                 # "triggering" (default), "*", or explicit PR number expression
+      max: 1
+  ```
+
 - **`set-issue-type:` / `set-issue-field:`** — Set GitHub Issues type or any single field by name/value (default `max: 5`). Useful for triage workflows that classify issues without using labels.
 - **`upload-artifact:`** — Upload files as run-scoped GitHub Actions artifacts (configured via `max-uploads:` not `max:`). Prefer over `upload-asset:` for most cases.
 - **`dispatch_repository:`** *(experimental)* — Trigger `repository_dispatch` in **external** repositories. **Audit carefully:** pairing with `roles: all` lets untrusted triggers reach other repos.
@@ -552,11 +589,19 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 
 **Safe-output file-reference hardening** — Safe-output MCP tool calls reject `@filepath` local-file references. Agents must pass explicit structured arguments or uploaded artifact/asset references; don't rely on local runner paths surviving into safe-output execution.
 
+**Container image digest pinning** — Lock files pin built-in container images (including the AWF firewall sidecar) by digest for reproducible, tamper-resistant execution. Digest pinning for AWF sidecar images was temporarily missing in early v0.79.x builds — recompile any workflows compiled with v0.79.0–v0.79.4 to restore pinned digests (fixed in v0.79.6).
+
+**SHA-pinning for `setup-cli` in `steps:` workflows** — The emitted `setup-cli` step inside custom `steps:` workflows now receives a SHA pin (fixed in v0.79.4). Recompile any `steps:`-based workflows compiled before v0.79.4 to pick up the pinned reference.
+
 **Validation ergonomics:** Compiler/validation errors include `file:line:col` context and fuzzy "Did you mean?" suggestions for common typos in engine names, events, permission scopes, and MCP tool types.
 
 ## Breaking Changes & Migrations
 
 Deprecated frontmatter fields are rejected by the compiler. Run `gh aw fix --write` to auto-fix supported patterns. Some migrations (e.g., `cli-proxy`, `.mcp.json`) require manual edits — see [`references/migrations.md`](references/migrations.md) for the full table and version-pinned bug history.
+
+> **⚠️ v0.79.4 breaking changes:**
+> - **`dangerously-disable-sandbox-agent: true`** is rejected — replace with a string justification of ≥ 20 characters.
+> - **`user-invokable:` and `disable-model-invocation:`** are rejected — these Copilot-specific fields have no meaning in gh-aw; remove them from any `.github/workflows/*.md`.
 
 Supported runtimes: `node`, `python`, `go`, `uv`, `bun`, `deno`, `ruby`, `java`, `dotnet`, `elixir`.
 
