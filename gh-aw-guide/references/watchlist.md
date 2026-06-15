@@ -2,31 +2,37 @@
 
 This file tracks upstream main-branch and experimental signals that should not be treated as current gh-aw behavior until a stable release note ships them. Stable guidance remains in `SKILL.md`, `architecture.md`, and `migrations.md`.
 
-Last checked: 2026-06-04. Stable baseline: v0.77.5.
+Last checked: 2026-06-15. Stable baseline: v0.79.8 (gh-aw is now in [public preview](https://github.blog/changelog/2026-06-11-github-agentic-workflows-is-now-in-public-preview/) — drop any lingering "research preview" framing from reviewed workflows).
 
-## Stable findings from this refresh
+## Items resolved into v0.79.x stable
 
-- No stable releases newer than v0.77.5 were available.
-- The latest stable release notes contained no glossary-maintainer, documentation-maintainer, GitHub Next, Azure DevOps, or AzDO product changes.
-- `.github/workflows/glossary-maintainer.md` is present in v0.77.5 and unchanged on main at the time of this refresh. It is a workflow exemplar, not a runtime feature.
+These items previously sat on this watchlist and have now shipped in stable; they are documented in `SKILL.md` / `migrations.md`:
 
-## Unreleased main-branch items to watch
+- **Effective-tokens → AI Credits (AIC) rename** with `effective-tokens-to-ai-credits` codemod (`gh aw fix --write`). New defaults: 1000 AIC/run, opt-in 5000 AIC/24h daily cap, 400 AIC threat-detection cap. (v0.79.4)
+- **Daily AIC guardrail behavior** — opt-in via `max-daily-ai-credits`; skipped for `workflow_call`/`repository_dispatch`/`workflow_dispatch` carrying `aw_context` metadata. Cost-management docs now exist upstream. (v0.79.4–v0.79.8)
+- **`safe-outputs.timeout-minutes` field** with default raised from 15 → 45 minutes. (v0.79.4)
+- **Custom `models:` frontmatter overlay** for non-catalog model pricing. (v0.79.4)
+- **`create-check-run.target`** PR-targeting field (`triggering` / `"*"` / explicit). (v0.79.4)
+- **`features.dangerously-disable-sandbox-agent`** literal-string-justification requirement (boolean/expression rejected). (v0.79.4 BREAKING)
+- **`features.user-invokable` / `features.disable-model-invocation` removed** from schema (validation error). (v0.79.4 BREAKING)
+- **`engine.max-turns` → top-level `max-turns`** with `engine-max-turns-to-top-level` codemod. (v0.79.4)
+- **AWF firewall upgraded to 0.27.2** + Go MCP server 4-process child-`gh` guardrail. (v0.79.6)
+- **`gh-aw.aic` emitted as `doubleValue` on OTLP conclusion spans.** (v0.79.6)
+- **`environment:` propagation to detection job** + `set_issue_field` GraphQL fix + `create_issue.labels` accepts comma-separated string + Copilot arbitrary `HOME` + `--gh-aw-ref` SHA pinning at compile time. (v0.79.8)
+
+## Unreleased main-branch / prerelease items to watch
 
 Do not copy these into stable guidance until they appear in stable release notes and are cross-checked against reference docs:
 
-- Copilot SDK driver/harness work: `copilot_harness: drive Copilot via @github/copilot-sdk when copilot-sdk: true`, follow-up SDK stdin/setup fixes, and partial rollout to Copilot-backed workflows.
-- Daily effective-token guardrail behavior after v0.77.5: main includes a change to emit the daily ET guardrail by default and disable only on explicit `-1`, which differs from the v0.77.5 release note that gated setup on explicit configuration.
-- `timeout-minutes` templating support in schema/custom job compilation.
-- Safe-output token placeholder handling: main keeps safe-output token placeholders out of runtime `config.json`.
-- GitHub OIDC/WIF detection permission fix: main adds `id-token: write` to the detection job under `engine.auth: github-oidc`.
-- Main-branch docs around `max-daily-effective-tokens` cost-management guidance.
-- Checkout/push guidance around absent git credentials after checkout and `push_to_pull_request_branch` behavior in multi-checkout workflows.
-- Partial-clone/sparse-checkout fixes and safe-output ref-fetch changes.
-- Cross-repo `create_pull_request` validation fixes and `pull-request-target-checkout-false` codemod safety fixes.
-- Safe-output completion hardening after v0.77.5: main contains several changes requiring workflows/agents to emit explicit terminal safe-output calls and to fall back when engine/tool permissions block normal output. Do not document exact behavior until a stable release describes it.
-- Safe-output bundle/patch integrity fixes after v0.77.5: main includes fixes for patch/bundle desynchronization and a file-protection bypass via patch-parser differential. Treat as a high-priority stable-release review item when the next stable ships.
-- Premium request / PRU removal: main removes premium-requests support from compiler, JS, and docs. Wait for stable release notes before changing Copilot billing/cost guidance.
-- Agentic workflow designer skill and designer-drift-audit workflow: main contains a portable `agentic-workflow-designer` skill plus a designer-drift workflow. Treat as experimental workflow-design tooling until it appears in stable docs/releases.
+- **v0.79.5 / v0.79.7 prereleases** — Check release notes for any prerelease-only knobs before promoting; v0.79.5 / v0.79.7 carry incremental fixes that mostly landed in v0.79.6 / v0.79.8 stables.
+- **Copilot SDK driver/harness** — `copilot_harness: drive Copilot via @github/copilot-sdk when copilot-sdk: true` plus SDK stdin/setup follow-ups. Still rolling out.
+- **`timeout-minutes` templating support** beyond the main agent job (`workflow_call` input forwarding works today; expanded surfaces still TBD).
+- **Safe-output token placeholder handling** — main keeps safe-output token placeholders out of runtime `config.json`.
+- **GitHub OIDC/WIF detection permission** — main adds `id-token: write` to the detection job under `engine.auth: github-oidc`. Verify before relying on OIDC in detection.
+- **Partial-clone / sparse-checkout** fixes and safe-output ref-fetch changes still landing.
+- **Cross-repo `create_pull_request` validation** fixes and `pull-request-target-checkout-false` codemod safety fixes.
+- **Designer / drift-audit tooling** — Portable `agentic-workflow-designer` skill and `designer-drift-audit` workflow continue to evolve in main; treat as experimental authoring tooling until stable.
+- **Code Simplifier per-run hard budgets** — Internal codemod safety nets; surfaces may stabilize in a later release.
 
 ## GitHub Next / "next" signals
 

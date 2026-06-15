@@ -41,6 +41,12 @@ sources:
   - url: https://github.github.com/gh-aw/reference/command-triggers/
     sections: ["Anti-Patterns"]
 
+  # Cost / billing reference (added v0.79.4 with the AIC rename)
+  - url: https://github.github.com/gh-aw/reference/cost-management/
+    sections: ["Engine & Runtime Updates", "Anti-Patterns"]
+  - url: https://github.github.com/gh-aw/reference/sandbox/
+    sections: ["Security Boundaries", "Anti-Patterns"]
+
   # Extended reference (lower change frequency, but contain important context)
   - url: https://github.github.com/gh-aw/reference/engines/
     sections: ["Additional Frontmatter Features"]
@@ -102,7 +108,7 @@ sources:
 
   # GitHub releases — check for new stable versions
   - releases: github/gh-aw
-    last_reviewed_release: v0.77.5
+    last_reviewed_release: v0.79.8
 
 style: |
   Match existing section structure. Use tables for feature comparisons.

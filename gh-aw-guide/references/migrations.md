@@ -15,10 +15,45 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 | `--safe-update` CLI flag | `--approve` | Update scripts/docs |
 | `features.copilot-requests: true` | `permissions.copilot-requests: write` | `gh aw fix --write` |
 | `tools.serena` | Remove; configure an MCP server explicitly if still needed | Manual edit |
+| `max-effective-tokens:` / `max-daily-effective-tokens:` | `max-ai-credits:` / `max-daily-ai-credits:` (AIC: 1 AIC = $0.01; new defaults: 1000/run, opt-in daily cap) | `gh aw fix --write` (codemod: `effective-tokens-to-ai-credits`, including `-1` sentinel) |
+| `engine.max-turns:` | Top-level `max-turns:` | `gh aw fix --write` (codemod: `engine-max-turns-to-top-level`) |
+| `features.user-invokable:` / `features.disable-model-invocation:` | Remove (validation error — Copilot-specific knobs never honored by gh-aw) | Manual edit |
+| `features.dangerously-disable-sandbox-agent: true` (or expression) | Literal string ≥20 chars explaining why | Manual edit |
 
 ## Version-Specific Bug History
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
+
+### Fixed in v0.79.8
+- **`environment:` not propagating to `detection` job** — Top-level `environment:` is now applied to the threat-detection job, so environment-scoped secrets are accessible during detection.
+- **`set_issue_field` GraphQL update** — Programmatic field updates use the correct GraphQL mutation and no longer fail on common field types.
+- **`create_issue.labels` accepts comma-separated string** — In addition to a YAML array, the safe output now also normalizes `"area-a, area-b"` strings into individual labels.
+- **Copilot CLI: arbitrary `HOME`** — Copilot engine no longer assumes `$HOME` is the runner default; non-default home paths work for self-hosted/container runners.
+- **`--gh-aw-ref` resolves to a commit SHA at compile time** — `gh aw compile --gh-aw-ref vX.Y.Z` (or branch) records the resolved commit SHA in the lock file for deterministic, audit-friendly builds.
+- **`effective-tokens-to-ai-credits` codemod completion** — `gh aw fix --write` now correctly migrates the `-1` sentinel from `max-effective-tokens` / `max-daily-effective-tokens` to the new `max-ai-credits` / `max-daily-ai-credits` fields.
+- **AIC false-positive on threat-detection** — Threat-detection runs are accounted under their own `safe-outputs.threat-detection.max-ai-credits` budget instead of double-counting against the main `max-ai-credits` cap.
+- **`listWorkflowRuns` 24-hour cutoff** — The daily AIC guardrail's run-aggregation query no longer scans beyond the 24-hour window, fixing slow activation on long-lived workflows.
+- **New Go linters** (`httpnoctx`, `hardcodedfilepath`) — Internal compiler quality gates; not author-facing.
+
+### Fixed in v0.79.6
+- **AWF firewall upgraded to 0.27.2** — Brings firewall fixes and policy improvements; review `network.allowed` allowlist behavior under the new firewall if you observe newly blocked/allowed hosts.
+- **Go MCP server 4-process guardrail** — Child `gh` invocations spawned by the in-process Go MCP server are now capped at 4 concurrent processes to prevent runner exhaustion under high tool-call burst.
+- **Windows CLI process-wrapper deadlock** — Removed a deadlock when running `gh aw` on Windows shells that wrap child processes (affects local authoring only — Windows is not a supported runner).
+- **`gh-aw.aic` emitted as `doubleValue` on OTLP conclusion spans** — Span attribute is now numeric (was a string), enabling correct aggregation in OTLP backends.
+- **Smarter failure-title generation** — Run-failure issues use more specific titles derived from observed conclusion / first-error so duplicate-by-title deduplication groups related failures.
+- **Documented `copilot-requests: write` permission** — Instruction docs and template scaffolds now recommend explicit `copilot-requests: write` instead of the old `features.copilot-requests` flag.
+
+### Fixed in v0.79.4
+- **BREAKING: `features.dangerously-disable-sandbox-agent` requires literal string ≥20 chars** — Boolean `true` and expressions are rejected by the compiler. Existing workflows must replace `true` with a static justification (e.g. `"controlled environment with no internet access"`). See `SKILL.md` Frontmatter Features.
+- **BREAKING: `features.user-invokable` and `features.disable-model-invocation` removed** — Both fields now produce validation errors. They were Copilot-specific signals never enforced by gh-aw; delete them from existing workflows.
+- **`models:` custom pricing overlay** — New top-level frontmatter `models:` provides AIC cost overrides for non-catalog or private models using the `models.json` providers shape. Imported overlays merge first, main-workflow overlay wins last at model granularity.
+- **`safe-outputs.timeout-minutes:` field + default 15→45 min** — New per-workflow override for the consolidated `safe_outputs` job timeout; default raised from 15 minutes to 45 minutes so multi-step safe-output flows (e.g., sequential `push-to-pull-request-branch`) no longer require manual tuning on most repos.
+- **`create-check-run.target: triggering | "*" | <explicit PR>`** — New PR-targeting field for the `create-check-run` safe output; defaults to `triggering` and always resolves the current PR head SHA via the Pulls API to survive force-pushes.
+- **`max-effective-tokens` → `max-ai-credits` rename (AIC terminology)** — The unit of cost reporting moved from "effective tokens" to AI Credits (1 AIC = $0.01 USD, sourced from models.dev). Defaults: 1000 AIC per run, 5000 AIC per 24-hour window (opt-in via `max-daily-ai-credits`). Threat-detection has its own 400 AIC default cap under `safe-outputs.threat-detection.max-ai-credits`. Codemod: `gh aw fix --write`.
+- **Steering messages emitted in unified log** — Budget-warning and steering messages now appear inline in the unified `gh aw replay` log alongside agent messages, instead of only in raw run output.
+- **Milestone cache scoping** — Milestone resolution caches are now scoped per repository so multi-repo workflows don't collide on milestone IDs.
+- **Runtime CLI setup actions SHA-pinned** — Generated lock files now SHA-pin runtime setup actions (Node, Python, etc.) instead of using floating major refs.
+- **AIC telemetry across engines** — Copilot, Claude, Codex, and Codex-mini engines now emit consistent `gh-aw.aic`, `gh-aw.tokens.*`, and `gh-aw.model.*` OTLP attributes.
 
 ### Fixed in v0.77.5
 - **Daily effective-token guardrail setup overhead/failures** — `max-daily-effective-tokens` guardrail setup (including `@actions/artifact`) now runs only when explicitly configured, avoiding unnecessary activation work and missing-dependency failures on workflows that do not use the guardrail.

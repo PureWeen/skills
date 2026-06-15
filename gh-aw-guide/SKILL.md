@@ -35,7 +35,7 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 
 ### Anti-Patterns: Manual Reimplementations to Avoid
 
-> ⏱ **Staleness note (last reviewed: 2026-06-04 against gh-aw v0.77.5):** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), and [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/) before reimplementing.
+> ⏱ **Staleness note (last reviewed: 2026-06-15 against gh-aw v0.79.8 — first **public-preview** release wave).** gh-aw ships new built-ins frequently. If you don't see what you need here, check the canonical [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/), [triggers reference](https://github.github.com/gh-aw/reference/triggers/), [frontmatter reference](https://github.github.com/gh-aw/reference/frontmatter/), and [cost-management reference](https://github.github.com/gh-aw/reference/cost-management/) before reimplementing.
 
 | If you're about to implement... | Use this built-in instead |
 |---------------------------------|--------------------------|
@@ -101,7 +101,7 @@ safe-outputs:
 
 > **🚨 `max:` is type-specific — it does NOT uniformly mean "max tool calls".** Setting `max: 1` on `add-labels` thinking "one tool call per run" silently drops every label beyond the first (the agent batches multiple labels per call, but `max:` counts the total labels). Always check the unit before setting it.
 
-> ⏱ **Defaults table (last verified 2026-06-01 against gh-aw v0.77.5 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
+> ⏱ **Defaults table (last verified 2026-06-15 against gh-aw v0.79.8 — see [safe-outputs reference](https://github.github.com/gh-aw/reference/safe-outputs/)):** Treat as non-authoritative — verify upstream for types not listed or when reviewing a workflow on an older gh-aw version.
 >
 > | Type | What `max:` counts | Default |
 > |---|---|---|
@@ -462,7 +462,7 @@ permissions:
   copilot-requests: write
 ```
 
-**Effective-token guardrails:** `max-effective-tokens` defaults to `25000000`; warnings are injected near 80/90/95/99% of budget. Use `K`/`M` suffixes (e.g., `100M`) or a negative value to disable. `max-daily-effective-tokens` adds a disabled-by-default 24-hour per-workflow, per-triggering-user cap; when exceeded, activation skips the agent and reports specialized failure context.
+**AI Credits (AIC) guardrails:** `max-ai-credits` defaults to `1000` (1 AIC = $0.01 USD; pricing sourced from [models.dev](https://models.dev/)); steering messages are injected near 80/90/95/99% of budget. Use plain integers or `K`/`M` suffixes (e.g., `100M`); a negative value disables both enforcement and steering. `max-daily-ai-credits` adds an opt-in 24-hour per-workflow cap aggregated across recent runs; the guardrail is skipped for `workflow_call`, `repository_dispatch`, and `workflow_dispatch` runs carrying internal `aw_context` dispatch metadata. Threat-detection has its own `safe-outputs.threat-detection.max-ai-credits` budget (default `400`, override via `GH_AW_DEFAULT_DETECTION_MAX_AI_CREDITS`). The legacy `max-effective-tokens` / `max-daily-effective-tokens` fields are deprecated — run `gh aw fix --write` to apply the `effective-tokens-to-ai-credits` codemod (including the `-1` sentinel).
 
 **Provider/auth knobs:** Copilot supports `engine.copilot-sdk: true` for SDK sidecar workflows. Claude supports Anthropic WIF through `engine.auth.provider: anthropic` plus `federation-rule-id`, `organization-id`, `service-account-id`, and `workspace-id`. BYOK Azure/OpenAI deployments can disable AWF model-name rewriting with `sandbox.agent.model-fallback: false`; API gateways that require nonstandard headers can set `sandbox.agent.targets.<provider>.authHeader`.
 
@@ -488,6 +488,38 @@ checkout:
 **`tracker-id:`** — Adds hidden `<!-- gh-aw-tracker-id: ... -->` markers to workflow-created issues, PRs, discussions, and comments so operators can search for all assets associated with a workflow.
 
 **Project UTC offset:** `.github/workflows/aw.json` can set `{ "utc": "-08:00" }`; `GH_AW_DEFAULT_UTC` is the enterprise fallback. This affects rendered timestamps and expiration messages, not scheduling.
+
+**`models:` (custom model pricing overlay):** Top-level frontmatter field that mirrors the built-in `models.json` structure and merges over it at runtime so `gh aw audit` / cost reporting see correct AIC values for private or non-catalog models. Imported overlays merge first; the main workflow's overlay wins on conflict at model granularity (whole model entry replaced; unmentioned models/providers preserved). Only the `providers` structure is accepted — the legacy alias-map form is rejected:
+
+```yaml
+models:
+  providers:
+    anthropic:
+      models:
+        my-custom-claude:
+          cost:
+            input: "3e-06"
+            output: "1.5e-05"
+            cache_read: "3e-07"
+            cache_write: "3.75e-06"
+```
+
+**`safe-outputs.timeout-minutes:`** — Override the consolidated `safe_outputs` job timeout (default 45 minutes; was 15 minutes before this knob existed). Raise it for workflows running many sequential safe-output operations against large monorepos (e.g., several `push-to-pull-request-branch` cycles):
+
+```yaml
+safe-outputs:
+  timeout-minutes: 120
+  push-to-pull-request-branch: {}
+```
+
+**`features.dangerously-disable-sandbox-agent:` requires a literal justification string.** Boolean `true` and expressions like `${{ inputs.reason }}` are rejected by the compiler. The value must be a **static literal of at least 20 characters** explaining why the agent firewall is being removed; the string is stored for audit and diagnostics. Only use this in combination with `sandbox.agent: false` when the workflow genuinely runs in a controlled environment:
+
+```yaml
+features:
+  dangerously-disable-sandbox-agent: "controlled environment with no internet access"
+sandbox:
+  agent: false
+```
 
 **`tools.github.allowed-repos: current`** — Use this in reusable workflows to scope the GitHub MCP guard policy to the repository where the workflow is running without hard-coding `owner/repo`.
 
@@ -527,6 +559,7 @@ observability:
 
 The official safe-outputs reference covers 30+ output types — the ones below are commonly missed even though they materially change workflow design:
 
+- **`create-check-run`** — Creates a first-class GitHub Check Run that appears in the PR Checks UI. `name:` is configured in frontmatter (not accepted from the agent); when `name` equals the workflow name it auto-suffixes with `(Result)` to avoid being collapsed into the workflow's own check entry. **`target:`** controls SHA resolution: `triggering` (default — resolves the current PR head via the Pulls API so the check follows force-pushes), `"*"` (the agent must include `pull_request_number` / `pr_number` / `pr` / `pull_number` per call), or an explicit PR number expression like `"${{ github.event.inputs.pr }}"`. Same-repo only.
 - **`set-issue-type:` / `set-issue-field:`** — Set GitHub Issues type or any single field by name/value (default `max: 5`). Useful for triage workflows that classify issues without using labels.
 - **`upload-artifact:`** — Upload files as run-scoped GitHub Actions artifacts (configured via `max-uploads:` not `max:`). Prefer over `upload-asset:` for most cases.
 - **`dispatch_repository:`** *(experimental)* — Trigger `repository_dispatch` in **external** repositories. **Audit carefully:** pairing with `roles: all` lets untrusted triggers reach other repos.

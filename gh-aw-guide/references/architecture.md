@@ -98,10 +98,11 @@ To **allow fork PRs**, add `forks: ["*"]` to the `pull_request` trigger in the `
 
 | Layer | What it does | What it doesn't do |
 |-------|-------------|-------------------|
-| **AWF network firewall** | Restricts outbound to allowlisted domains | Doesn't prevent reading env vars inside the container |
+| **AWF network firewall** | Restricts outbound to allowlisted domains. AWF runtime currently at 0.27.x line (firewall policy fixes, refined upstream allowlist) | Doesn't prevent reading env vars inside the container |
 | **`redact_secrets.cjs`** | Scrubs known secret values from logs/artifacts post-agent | Doesn't catch encoded/obfuscated values |
 | **Threat detection agent** | Reviews agent outputs before safe-outputs publishes them | Can miss novel exfiltration techniques |
 | **Safe-outputs permission separation** | Write operations happen in separate job, not the agent | Agent can still request writes via safe-output tools |
+| **MCP server child-process guardrail** | Go-side MCP server caps concurrent child `gh` invocations at 4 to prevent runner exhaustion under burst tool calls | Does not gate output volume — pair with safe-output `max:` |
 | **Integrity filtering** | Filters untrusted GitHub content before agent sees it (DIFC proxy) | Runtime auto-lockdown varies by event type — verify for sensitive workflows |
 | **Protected files** | Blocks agent from modifying package manifests, `.github/`, `.githooks/`, `.husky/`, `DESIGN.md`, etc. | Only applies to `create-pull-request` and `push-to-pull-request-branch` |
 | **Container image digest pinning** (v0.70.0+) | Lock files pin built-in container images by digest for reproducible, tamper-resistant execution | Only covers images managed by `gh aw compile` — custom containers are not auto-pinned |
