@@ -4,7 +4,7 @@ description: "Multi-model adversarial PR code review. Dispatches 3 parallel revi
 license: MIT
 metadata:
   author: PureWeen
-  version: "2.0.0"
+  version: "2.2.0"
 ---
 
 # Generic Adversarial PR Reviewer
@@ -110,9 +110,9 @@ Launch **exactly 3 sub-agents in parallel** using the `task` tool with `mode: "b
 
 | Sub-agent | Model | Strength |
 |-----------|-------|----------|
-| Reviewer 1 | `claude-opus-4.6` | Deep reasoning, architecture, subtle logic bugs |
-| Reviewer 2 | `claude-sonnet-4.6` | Fast pattern matching, common bug classes, security |
-| Reviewer 3 | `gpt-5.3-codex` | Alternative perspective, edge cases |
+| Reviewer 1 | `claude-opus-4.8` | Deep reasoning, architecture, subtle logic bugs |
+| Reviewer 2 | `gpt-5.5` | Fast pattern matching, common bug classes, security |
+| Reviewer 3 | `gemini-3.1-pro-preview` | Cross-family perspective, uncorrelated failure modes, edge cases |
 
 Each sub-agent prompt **must** include all of the following sections in this order:
 
@@ -251,21 +251,7 @@ When running multiple rounds of review on the same PR, track which changes were 
 
 When multiple reviewers flag the same issue at slightly different lines or with different wording, merge them into a single finding. Use the most specific description, the highest severity, and note the consensus count.
 
-### Step 5: Check CI Status
-
-Before posting results, check CI status:
-
-```
-gh pr checks {pr_number} --repo {owner}/{repo}
-```
-
-**Never post a clean/LGTM verdict if any required CI check is failing or pending.** If CI is failing:
-- Investigate whether the failure is caused by the PR's code changes or is a pre-existing/infrastructure issue.
-- If caused by the PR, include it as a finding (❌ error).
-- If it's a known flake or infra issue, note it in the summary but still do not use LGTM language — the PR isn't mergeable until CI is green.
-- If the PR description acknowledges the failure and documents a dependency, note it in the summary.
-
-### Step 6: Validate Inline Comment Placement
+### Step 5: Validate Inline Comment Placement
 
 Before posting inline comments, validate **both** for each finding:
 
@@ -274,7 +260,7 @@ Before posting inline comments, validate **both** for each finding:
 
 **If either path or line is invalid**, move the finding to the design-level comment instead. A single invalid inline comment causes the entire `submit_pull_request_review` to fail and ALL inline comments are lost.
 
-### Step 7: Post Results
+### Step 6: Post Results
 
 Post in this order:
 
@@ -290,12 +276,13 @@ Post in this order:
    - Summary of all findings ranked by severity
    - Methodology note: "3 independent reviewers with adversarial consensus"
    - Consensus markers (e.g., "3/3 reviewers", "2/3 after dispute")
-   - CI status assessment (check runs, build results)
    - Test coverage assessment (are changed paths covered by tests?)
    - Prior review status (existing reviews, resolved/unresolved threads)
    - `event: "COMMENT"` always — never `APPROVE` or `REQUEST_CHANGES`
    - Never mention specific model names — use "Reviewer 1/2/3"
    - **Copilot-authored PRs:** If the PR author is `Copilot` (the GitHub Copilot coding agent) and the verdict has issues, prefix the review summary with `@copilot ` so the comment automatically triggers Copilot to address the feedback. Do NOT add the prefix for clean verdicts.
+
+This skill evaluates code only. CI build/test/check status is intentionally out of scope — do not run `gh pr checks`, do not gate the verdict on CI being green or pending, and do not include CI status in the review summary. If CI feedback is wanted, ask for it as a separate task.
 
 ## Important Rules
 
