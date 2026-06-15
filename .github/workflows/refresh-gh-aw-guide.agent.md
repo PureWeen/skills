@@ -15,8 +15,31 @@ permissions:
 # to disk for the agent to read. This avoids granting the agent direct API
 # access for the scraping phase.
 steps:
+  - name: Dedupe — skip if a sync PR is already open
+    id: dedupe
+    env:
+      GH_TOKEN: ${{ github.token }}
+    run: |
+      # gh-aw `create-pull-request` does NOT support `deduplicate-by-title`
+      # (only `create-issue` has that). Without this guard, every daily run
+      # that finds drift opens a brand-new draft PR with a fresh branch
+      # suffix — they stack up forever until a human merges or closes them.
+      # See PureWeen/skills PRs #19–#23 for the historical pile-up.
+      OPEN_COUNT=$(gh pr list \
+        --repo "${{ github.repository }}" \
+        --state open \
+        --search '"[gh-aw-guide-sync]" in:title' \
+        --json number --jq 'length')
+      echo "open_count=$OPEN_COUNT" >> "$GITHUB_OUTPUT"
+      if [ "$OPEN_COUNT" -gt 0 ]; then
+        echo "Found $OPEN_COUNT open sync PR(s); short-circuiting before scraper."
+      else
+        echo "No open sync PRs; will proceed to staleness check."
+      fi
+
   - name: Run staleness check
     id: staleness
+    if: steps.dedupe.outputs.open_count == '0'
     env:
       GH_TOKEN: ${{ github.token }}
     run: |
@@ -29,6 +52,14 @@ steps:
       echo "changes_detected=$CHANGES" >> "$GITHUB_OUTPUT"
       echo "Staleness check complete. changes_detected=$CHANGES"
       head -c 2000 /tmp/drift-results/staleness.json || true
+
+  - name: Stub staleness output when deduped
+    if: steps.dedupe.outputs.open_count != '0'
+    run: |
+      mkdir -p /tmp/drift-results
+      echo '{"changes_detected":false,"reason":"open sync PR already exists","open_pr_count":${{ steps.dedupe.outputs.open_count }}}' \
+        > /tmp/drift-results/staleness.json
+      echo "Skipped staleness check — ${{ steps.dedupe.outputs.open_count }} open sync PR(s) already exist."
 
   - name: Run upstream commit scan (if stale)
     if: steps.staleness.outputs.changes_detected == 'true'
