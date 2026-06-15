@@ -454,13 +454,21 @@ engine:
   permission-mode: auto
 ```
 
-**Copilot inference via `github.token`:** The old `features.copilot-requests` flag migrated to an explicit permission. Use `gh aw fix --write` on old workflows, then verify the compiled lock file:
+**Copilot inference via `GITHUB_TOKEN` (recommended, no PAT):** Grant `permissions.copilot-requests: write` and gh-aw uses the per-run GitHub Actions token for Copilot inference — no `COPILOT_GITHUB_TOKEN` PAT or repository secret is required, and AI Credits are billed to the **organization** that owns the repository.
 
 ```yaml
 permissions:
   contents: read
   copilot-requests: write
 ```
+
+Important gotchas:
+
+- **`COPILOT_GITHUB_TOKEN` and `GH_AW_GITHUB_TOKEN` are ignored for inference** when `copilot-requests: write` is set — those tokens are not passed to the Copilot engine. Don't try to mix-and-match per-user PATs with the permission; pick one.
+- **Org policy gate**: requires the "Allow use of Copilot CLI billed to the organization" Copilot policy (enabled by default if the org's "Copilot CLI" policy is on). If the policy is off, the run fails authentication.
+- **User-level inference budgets do NOT apply** to org-billed runs — cost isn't attributed to a user, so per-user caps can't gate spend. Cap spend with `max-ai-credits:` / `max-daily-ai-credits:` per workflow, and/or assign the repo's owning org to a [cost center](https://docs.github.com/billing/concepts/cost-centers) with a budget.
+- **Fork-friendly**: works in forked repos and org workflows without sharing a personal token.
+- Migrating from the old `features.copilot-requests` flag: run `gh aw fix --write`, then verify the compiled lock file.
 
 **AI Credits (AIC) guardrails:** `max-ai-credits` defaults to `1000` (1 AIC = $0.01 USD; pricing sourced from [models.dev](https://models.dev/)); steering messages are injected near 80/90/95/99% of budget. Use plain integers or `K`/`M` suffixes (e.g., `100M`); a negative value disables both enforcement and steering. `max-daily-ai-credits` adds an opt-in 24-hour per-workflow cap aggregated across recent runs; the guardrail is skipped for `workflow_call`, `repository_dispatch`, and `workflow_dispatch` runs carrying internal `aw_context` dispatch metadata. Threat-detection has its own `safe-outputs.threat-detection.max-ai-credits` budget (default `400`, override via `GH_AW_DEFAULT_DETECTION_MAX_AI_CREDITS`). The legacy `max-effective-tokens` / `max-daily-effective-tokens` fields are deprecated — run `gh aw fix --write` to apply the `effective-tokens-to-ai-credits` codemod (including the `-1` sentinel).
 
