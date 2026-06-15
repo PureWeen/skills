@@ -65,6 +65,8 @@ gh aw compile --approve       # Approve safe-update manifest changes (also on `r
 | `slash_command:` without `events:` filter | `events: [pull_request_comment]` or `events: [issue_comment]` |
 | `cancel-in-progress: true` on `slash_command:` workflows | `cancel-in-progress: false` |
 | `pull_request` trigger for agentic workflows | `slash_command:`, `label_command:`, or `schedule` |
+| Iterating on a new workflow's output in production | `staged: true` on `safe-outputs:` — previews all writes without creating real GitHub resources |
+| Separate workflow variants for issue vs. PR event context | `{{#if github.event.issue.number}}` conditional markdown blocks |
 
 ## Common Patterns
 
@@ -86,6 +88,10 @@ steps:
 ### Payload Sanitization
 
 Comment bodies, issue titles, and PR descriptions are **user-controlled untrusted input**. In pre-agent `steps:`, always use `steps.<id>.outputs.text` (sanitized) instead of raw `${{ github.event.comment.body }}`. ❌ **Never reference `${{ github.event.* }}` content fields directly in agent prompts.** Container sandboxing limits the write surface but does **not** prevent prompt injection (XPIA) — pair sanitization with tight `safe-outputs:` as defense-in-depth.
+
+**Sanitized activation outputs** — In the markdown prompt itself, use the platform-provided sanitized outputs to safely include event content without risking XPIA: `${{ steps.sanitized.outputs.text }}` (full context: title + body for issues/PRs, body for comments), `${{ steps.sanitized.outputs.title }}` (sanitized title), or `${{ steps.sanitized.outputs.body }}` (sanitized body). These are distinct from pre-agent step outputs.
+
+> ⚠️ **Prohibited in markdown content:** `secrets.*`, `env.*`, and `vars.*` expressions are rejected at compile time inside markdown content. Use them only in frontmatter YAML for configuration. Permitted markdown expressions are event properties (`github.event.*` IDs/numbers/SHAs/states), run metadata (`github.run_id`, `github.actor`, etc.), and pattern references (`steps.*`, `needs.*`, `github.event.inputs.*`).
 
 > 🛑 **Recursive workflow triggering**: Actions via `GITHUB_TOKEN` do **NOT** fire new workflow events (prevents infinite loops). Actions via GitHub App installation tokens or PATs **DO** fire events. This is why `github-token-for-extra-empty-commit:` requires a PAT — `GITHUB_TOKEN` pushes won't trigger CI on agent-created PRs.
 
@@ -147,6 +153,39 @@ safe-outputs:
   noop:
     report-as-issue: false   # Also suppress noop → comment behavior
 ```
+
+### Staged Mode — Preview Before Committing
+
+`staged: true` runs the full agent but **skips all writes** — instead, each output type prints a ✨-labelled preview in the Actions run summary showing exactly what would have been created (title, body, labels, assignees, diff summary, etc.). No GitHub resources are created.
+
+Enable globally or per output type:
+
+```yaml
+# Global: all output types preview-only
+safe-outputs:
+  staged: true
+  create-issue:
+    title-prefix: "[ai] "
+    labels: [automation]
+```
+
+```yaml
+# Scoped: preview only the risky output type, let others execute normally
+safe-outputs:
+  create-pull-request:
+    staged: true  # PRs: preview only
+  add-comment: {}  # Comments: execute normally
+```
+
+**Recommended adoption workflow:**
+1. Add `staged: true` and trigger the workflow on a real event
+2. Open the run → review the preview in the step summary
+3. Adjust the prompt or config until the output looks correct
+4. Remove `staged: true` (or set it to `false`) to start creating real resources
+
+Custom safe-output jobs should check `process.env.GH_AW_SAFE_OUTPUTS_STAGED === "true"` and skip writes when set. Override the preview heading/description with `messages.staged-title` / `messages.staged-description`.
+
+> **All built-in safe output types support staged mode.** See the [Staged Mode reference](https://github.github.com/gh-aw/reference/staged-mode/) for the full preview format and per-type support table.
 
 ### Concurrency
 
@@ -527,6 +566,38 @@ sandbox:
 
 **Inline skills:** Workflow markdown can define engine-native skills inline using `## skill: \`name\`` blocks, parallel to inline sub-agents. The compiler extracts them out of the main prompt and materializes them into the engine-specific skill directory at runtime.
 
+**Conditional Markdown** — Include or exclude sections of the prompt based on boolean expressions using `{{#if expression}} ... {{/if}}` blocks:
+
+```markdown
+---
+on:
+  issues: { types: [opened] }
+---
+# Issue Analyzer
+
+{{#if github.event.issue.number}}
+## Issue-Specific Analysis
+You are analyzing issue #${{ github.event.issue.number }}.
+{{/if}}
+
+{{#if github.event.pull_request.number}}
+## Pull Request Context
+You are reviewing PR #${{ github.event.pull_request.number }}.
+{{/if}}
+```
+
+Conditions use the same permitted expressions as frontmatter markdown (`github.event.*`, `github.actor`, `steps.*`, `needs.*`, `github.event.inputs.*`). **No nesting, else clauses, or loops.** Falsy: `false`, `0`, `null`, `""`.
+
+**Runtime imports (enhanced)** — Beyond the basic `{{#runtime-import filepath}}`, you can:
+
+```markdown
+{{#runtime-import? shared-instructions.md}}         {{/* optional — no error if missing */}}
+{{#runtime-import docs/auth.go:45-52}}              {{/* line range extraction */}}
+{{#runtime-import https://raw.githubusercontent.com/org/repo/main/checklist.md}}  {{/* URL import, cached 1h */}}
+```
+
+Security guards on runtime imports: YAML frontmatter and `${{ }}` expressions are stripped from imported content; file paths are restricted to `.github/`. URL imports are not path-restricted but are cached for 1 hour and have the same YAML/expression sanitization applied.
+
 For exhaustive frontmatter reference (`source:`, `private:`, `resources:`, `labels:`, `runtimes:`, `imports:`, `engine.*`, etc.), see [github/gh-aw frontmatter docs](https://github.github.com/gh-aw/reference/frontmatter/).
 
 ## OpenTelemetry / OTLP Observability
@@ -559,6 +630,8 @@ observability:
 
 The official safe-outputs reference covers 30+ output types — the ones below are commonly missed even though they materially change workflow design:
 
+- **`staged: true`** — Preview mode: runs the full agent but skips all writes; shows a ✨ preview in the Actions step summary. Enable globally on `safe-outputs:` or per output type. **Always start new workflows in staged mode** to verify output before creating real GitHub resources. See [Staged Mode pattern](#staged-mode--preview-before-committing) above.
+- **Replaying Safe Outputs** — If `safe_outputs` fails or is cancelled (transient API error, threat detection block, run cancellation), replay it via the auto-generated `agentics-maintenance.yml` workflow: Actions → "Agentic Maintenance" → Run workflow → set operation to `safe_outputs` + supply the original run URL. The maintenance workflow is **auto-generated** whenever any safe output uses an `expires:` field.
 - **`create-check-run`** — Creates a first-class GitHub Check Run that appears in the PR Checks UI. `name:` is configured in frontmatter (not accepted from the agent); when `name` equals the workflow name it auto-suffixes with `(Result)` to avoid being collapsed into the workflow's own check entry. **`target:`** controls SHA resolution: `triggering` (default — resolves the current PR head via the Pulls API so the check follows force-pushes), `"*"` (the agent must include `pull_request_number` / `pr_number` / `pr` / `pull_number` per call), or an explicit PR number expression like `"${{ github.event.inputs.pr }}"`. Same-repo only.
 - **`set-issue-type:` / `set-issue-field:`** — Set GitHub Issues type or any single field by name/value (default `max: 5`). Useful for triage workflows that classify issues without using labels.
 - **`upload-artifact:`** — Upload files as run-scoped GitHub Actions artifacts (configured via `max-uploads:` not `max:`). Prefer over `upload-asset:` for most cases.
@@ -576,6 +649,7 @@ The official safe-outputs reference covers 30+ output types — the ones below a
 - **`create-issue.group-by-day: true`** — Posts subsequent same-day runs as comments on the existing issue created earlier that UTC day, instead of creating duplicate issues. Pairs well with `close-older-issues: true` for daily/weekly report workflows.
 - **`create-issue.deduplicate-by-title:`** — Drop duplicate issues by title match (`true` for exact, integer for Levenshtein edit distance). Eliminates the "agent re-creates the same triage issue every run" pattern.
 - **`messages.append-only-comments: true`** — Disables the default behavior of editing the activation comment with final status; each run posts a fresh comment for an append-only timeline. Useful when audit-trail visibility matters more than UI tidiness.
+- **`messages:` footer template variables** — Customize the attribution line appended to agent-created issues/PRs/comments. Use `{ai_credits_suffix}` (preferred — pre-formatted cost like " · sonnet46 12.4 AIC" or empty string) instead of the legacy `{effective_tokens}` / `{effective_tokens_formatted}`. `{workflow_source}` and `{workflow_source_url}` are available in `footer-install` templates; the default `footer-install` renders as a collapsed `<details>` block with the `gh aw add` command.
 
 ## Security Hardening
 

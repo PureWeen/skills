@@ -41,6 +41,13 @@ sources:
   - url: https://github.github.com/gh-aw/reference/command-triggers/
     sections: ["Anti-Patterns"]
 
+  # Templating reference (conditional markdown, runtime imports)
+  - url: https://github.github.com/gh-aw/reference/templating/
+    sections: ["Frontmatter Features", "Common Patterns"]
+  # Staged mode reference
+  - url: https://github.github.com/gh-aw/reference/staged-mode/
+    sections: ["Anti-Patterns", "Safe Outputs Quick Reference"]
+
   # Cost / billing reference (added v0.79.4 with the AIC rename)
   - url: https://github.github.com/gh-aw/reference/cost-management/
     sections: ["Engine & Runtime Updates", "Anti-Patterns"]
