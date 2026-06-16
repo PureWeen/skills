@@ -228,6 +228,16 @@ The `pull_request` trigger causes an "Approve and run workflows" button for firs
 
 **Design rule**: Assume the approval gate will always be clicked. The only safe workflows are ones that produce the same outcome whether the actor is trusted or untrusted. Prefer `issue_comment`/`slash_command:` (not subject to the gate) or `schedule`/`workflow_dispatch` over `pull_request` when possible.
 
+### Deployment-Environment Gating (`environment:` / `manual-approval:`)
+
+Unlike the auto-injected fork gate above, a **GitHub Actions deployment environment** is a strong, intentional per-workflow control:
+
+- **Top-level `environment:`** — string (`environment: prod`) or object (`environment: { name: prod, url: ... }`). Binds the agent job to a deployment environment so its protection rules — **required reviewers** (human approval before the agent runs), wait timers, and branch/tag restrictions — and **environment-scoped secrets** gate every run. The value is auto-propagated to the safe-outputs and threat-detection jobs so environment-scoped secrets stay accessible there.
+- **`safe-outputs.environment:`** — override the deployment environment for just the safe-outputs job; when unset, the top-level `environment:` is propagated automatically.
+- **`on.manual-approval:`** — string naming an environment that requires manual approval before the workflow can run (must match a repo-configured environment). The gh-aw-native way to force an approval step via environment protection rules.
+
+**Why it matters:** a required-reviewer environment gate is a stronger access/spend control than the per-run AIC budget. When a workflow is gated behind a deployment environment (a human must approve, and environment-scoped secrets are the only write/spend path), relaxing or disabling the per-run `max-ai-credits` guardrail (e.g., `max-ai-credits: -1`) is a deliberate, defensible choice — the environment approval becomes the real spend/abuse control. Gate any write-capable or spendy agentic workflow (PR reviewers, auto-fixers) behind such an environment.
+
 ### LabelOps
 
 - **`label_command:`** — One-shot command triggered by applying a label. Auto-removed after the workflow fires (self-resetting).
@@ -509,7 +519,7 @@ Important gotchas:
 - **Fork-friendly**: works in forked repos and org workflows without sharing a personal token.
 - Migrating from the old `features.copilot-requests` flag: run `gh aw fix --write`, then verify the compiled lock file.
 
-**AI Credits (AIC) guardrails:** `max-ai-credits` defaults to `1000` (1 AIC = $0.01 USD; pricing sourced from [models.dev](https://models.dev/)); steering messages are injected near 80/90/95/99% of budget. Use plain integers or `K`/`M` suffixes (e.g., `100M`); a negative value disables both enforcement and steering. `max-daily-ai-credits` adds an opt-in 24-hour per-workflow cap aggregated across recent runs; the guardrail is skipped for `workflow_call`, `repository_dispatch`, and `workflow_dispatch` runs carrying internal `aw_context` dispatch metadata. Threat-detection has its own `safe-outputs.threat-detection.max-ai-credits` budget (default `400`, override via `GH_AW_DEFAULT_DETECTION_MAX_AI_CREDITS`). The legacy `max-effective-tokens` / `max-daily-effective-tokens` fields are deprecated — run `gh aw fix --write` to apply the `effective-tokens-to-ai-credits` codemod (including the `-1` sentinel).
+**AI Credits (AIC) guardrails:** `max-ai-credits` defaults to `1000` (1 AIC = $0.01 USD; pricing sourced from [models.dev](https://models.dev/)); steering messages are injected near 80/90/95/99% of budget. Use plain integers or `K`/`M` suffixes (e.g., `100M`); a negative value disables both enforcement and steering (safest when the workflow is gated behind a deployment `environment:` with required reviewers — see *Deployment-Environment Gating* — so the approval gate becomes the real spend control). `max-daily-ai-credits` adds an opt-in 24-hour per-workflow cap aggregated across recent runs; the guardrail is skipped for `workflow_call`, `repository_dispatch`, and `workflow_dispatch` runs carrying internal `aw_context` dispatch metadata. Threat-detection has its own `safe-outputs.threat-detection.max-ai-credits` budget (default `400`, override via `GH_AW_DEFAULT_DETECTION_MAX_AI_CREDITS`). The legacy `max-effective-tokens` / `max-daily-effective-tokens` fields are deprecated — run `gh aw fix --write` to apply the `effective-tokens-to-ai-credits` codemod (including the `-1` sentinel).
 
 **Provider/auth knobs:** Copilot supports `engine.copilot-sdk: true` for SDK sidecar workflows. Claude supports Anthropic WIF through `engine.auth.provider: anthropic` plus `federation-rule-id`, `organization-id`, `service-account-id`, and `workspace-id`. BYOK Azure/OpenAI deployments can disable AWF model-name rewriting with `sandbox.agent.model-fallback: false`; API gateways that require nonstandard headers can set `sandbox.agent.targets.<provider>.authHeader`.
 

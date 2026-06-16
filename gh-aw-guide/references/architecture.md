@@ -202,6 +202,10 @@ The `pull_request` trigger causes an "Approve and run workflows" button for firs
 
 **Design rule**: Assume the approval gate will always be clicked. Prefer `slash_command:` or `schedule` over `pull_request` when possible.
 
+### Deployment-Environment Gate (`environment:` / `manual-approval:`)
+
+A GitHub Actions **deployment environment** is the inverse of the auto-injected fork gate — an intentional, per-workflow trust boundary rather than a passive one. Binding the agent job to an environment (top-level `environment:`, string or `{name, url}` object) makes its protection rules the gate: **required reviewers** force human approval before the agent runs, wait timers add delay, and branch/tag restrictions limit where it executes. Environment-scoped secrets become the only credential path, and the value auto-propagates to the safe-outputs and threat-detection jobs (override just the safe-outputs job with `safe-outputs.environment:`). `on.manual-approval:` names an environment whose approval is required before the run starts. Because a required-reviewer gate is a stronger spend/abuse control than the per-run AIC budget, gating a write-capable agent behind an environment is also what makes disabling `max-ai-credits` (`-1`) defensible.
+
 ---
 
 ## Fork PR Handling
