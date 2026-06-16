@@ -41,9 +41,21 @@ sources:
   - url: https://github.github.com/gh-aw/reference/command-triggers/
     sections: ["Anti-Patterns"]
 
+  # Templating reference (conditional markdown, runtime imports)
+  - url: https://github.github.com/gh-aw/reference/templating/
+    sections: ["Frontmatter Features", "Common Patterns"]
+  # Staged mode reference
+  - url: https://github.github.com/gh-aw/reference/staged-mode/
+    sections: ["Anti-Patterns", "Safe Outputs Quick Reference"]
+
   # Cost / billing reference (added v0.79.4 with the AIC rename)
   - url: https://github.github.com/gh-aw/reference/cost-management/
     sections: ["Engine & Runtime Updates", "Anti-Patterns"]
+  - url: https://github.github.com/gh-aw/reference/auth/
+    sections: ["Engine & Runtime Updates", "Security Boundaries"]
+  - url: https://github.blog/changelog/2026-06-11-agentic-workflows-no-longer-need-a-personal-access-token/
+    sections: ["Engine & Runtime Updates"]
+    reason: "Promoted copilot-requests: write to recommended no-PAT path; tracks future PAT/billing changelog updates"
   - url: https://github.github.com/gh-aw/reference/sandbox/
     sections: ["Security Boundaries", "Anti-Patterns"]
 

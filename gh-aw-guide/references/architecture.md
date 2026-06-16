@@ -72,6 +72,17 @@ The prompt is built in the **activation job** via `{{#runtime-import .github/wor
 - The agent prompt is always the base branch version — fork PRs cannot alter it
 - The prompt references files on disk (e.g., `SKILL.md`) — those files must exist in the agent's workspace
 
+**Runtime import variants:**
+
+```markdown
+{{#runtime-import filepath}}          <!-- required: fails if file missing -->
+{{#runtime-import? filepath}}         <!-- optional: silently skips if missing -->
+{{#runtime-import filepath:45-52}}    <!-- line-range extraction -->
+{{#runtime-import https://raw.githubusercontent.com/org/repo/main/file.md}}  <!-- URL, cached 1h -->
+```
+
+All file paths are resolved within `.github/`; you may include or omit the `.github/` prefix. YAML frontmatter and `${{ }}` expressions are stripped from imported content for security. URL imports use a 1-hour content cache.
+
 ### Fork PR Activation Gate
 
 By default, `gh aw compile` automatically injects a fork guard into the activation job's `if:` condition: `head.repo.id == repository_id`. This blocks fork PRs on `pull_request` events.
