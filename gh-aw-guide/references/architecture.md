@@ -60,6 +60,7 @@ pre-agent-steps:
 | Child SDK correlation | Compiled workflows with an OTLP endpoint also inject `OTEL_RESOURCE_ATTRIBUTES` so child OpenTelemetry SDKs inherit gh-aw correlation keys such as workflow name, repository, run ID, and engine ID. |
 | MCP gateway | The generated gateway config receives `endpoint`, `traceId`, and `spanId` only. OTLP auth headers are forwarded as the `OTEL_EXPORTER_OTLP_HEADERS` container env var, not embedded in the gateway JSON config pipe. |
 | Artifacts | gh-aw mirrors helper spans to `/tmp/gh-aw/otel.jsonl` and Copilot CLI spans to `/tmp/gh-aw/copilot-otel.jsonl`; when OTLP is enabled, these are uploaded in the `agent` artifact for debugging. |
+| Semantic conventions | gh-aw spans follow the OpenTelemetry **`cicd.automation.*`** semantic conventions (pipeline/run/action naming), and a W3C **`TRACEPARENT`** is propagated through every engine step so child OpenTelemetry SDKs continue the same trace instead of starting a disconnected root span. |
 
 Trace IDs are 32-character lowercase hex OpenTelemetry trace IDs, not GitHub run IDs or legacy `workflow_call_id` strings. Parent/child workflow correlation flows through `aw_context` (`otel_trace_id`, `otel_parent_span_id`, episode/hop identifiers), so `workflow_call` / dispatch chains can appear as one connected trace when callers preserve `aw_context`.
 

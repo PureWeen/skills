@@ -2,7 +2,21 @@
 
 This file tracks upstream main-branch and experimental signals that should not be treated as current gh-aw behavior until a stable release note ships them. Stable guidance remains in `SKILL.md`, `architecture.md`, and `migrations.md`.
 
-Last checked: 2026-06-15. Stable baseline: v0.79.8 (gh-aw is now in [public preview](https://github.blog/changelog/2026-06-11-github-agentic-workflows-is-now-in-public-preview/) — drop any lingering "research preview" framing from reviewed workflows).
+Last checked: 2026-06-25. Stable baseline: v0.80.9 (gh-aw is in [public preview](https://github.blog/changelog/2026-06-11-github-agentic-workflows-is-now-in-public-preview/) — drop any lingering "research preview" framing from reviewed workflows).
+
+## Items resolved into v0.80.x stable (shipped in v0.80.9)
+
+These previously sat on this watchlist or surfaced in the v0.80.x prerelease line and are now stable in v0.80.9; they are documented in `SKILL.md` / `migrations.md`:
+
+- **`safe-outputs.mentions.allow-team-members` → `allowed-collaborators` rename** (old name kept as a deprecated alias) with codemod `add-allow-team-members-collaborators`, plus new `allowed-teams` team-authorization (needs `read:org` token scope). (v0.80.7 BREAKING)
+- **`max-patch-size` default raised 1 MB → 4 MB (4096 KB).** (v0.80.0)
+- **Default AWF firewall bumped to v0.27.7** (was 0.27.2). (v0.80.6)
+- **`max-turn-cache-misses` runaway-loop guardrail** (maps to `apiProxy.maxCacheMisses`). (v0.80.7)
+- **`normalize-closing-keywords`** on `create-issue` / `add-comment` / `create-pull-request`. (v0.80.1)
+- **`required-category`** in `safe-outputs.create-discussion` (close only within a category). (v0.80.1)
+- **OTel `cicd.automation.*` semantic conventions + W3C `TRACEPARENT` propagation** through engine steps, plus configurable OTLP resource attributes. (v0.80.0–v0.80.1)
+- **Dedicated billing reference page** at `https://github.github.com/gh-aw/reference/billing/`. (v0.80.3)
+- **`merge-pull-request` safe-output parity** — `samples` + cross-repo targeting (still `max: 1`, experimental). (v0.80.4)
 
 ## Items resolved into v0.79.x stable
 
@@ -24,6 +38,10 @@ These items previously sat on this watchlist and have now shipped in stable; the
 
 Do not copy these into stable guidance until they appear in stable release notes and are cross-checked against reference docs:
 
+- **v0.81.0–v0.81.3 prereleases** — Newer than the v0.80.9 stable baseline but **not yet stable**; do not promote any v0.81.x-only behavior until it ships in a stable release and is cross-checked against reference docs.
+- **`slash_command` command-name wildcard suffix `*`** — The v0.80.7 release notes mention a trailing-`*` family match for slash commands, but this could **not** be confirmed in the v0.80.9 `command-triggers.md` reference or the workflow schema (where the only `*` is the `events:` selector). Do not document a command-name wildcard until upstream docs/schema confirm it.
+- **`auto_upgrade: true` in `aw.json`** → weekly `agentic-auto-upgrade.yml` — Release-noted in v0.80.7 but absent from the workflow JSON schema (it would live in `aw.json`, not frontmatter); confirm the exact key/location before documenting.
+- **Compiler auto-pinning of unversioned `uses:` action refs** — Release-noted in v0.80.7 but not confirmable in the v0.80.9 `security.md` reference; verify the exact behavior (and whether compile fails closed on unresolvable pins) before promoting.
 - **v0.79.5 / v0.79.7 prereleases** — Check release notes for any prerelease-only knobs before promoting; v0.79.5 / v0.79.7 carry incremental fixes that mostly landed in v0.79.6 / v0.79.8 stables.
 - **Copilot SDK driver/harness** — `copilot_harness: drive Copilot via @github/copilot-sdk when copilot-sdk: true` plus SDK stdin/setup follow-ups. Still rolling out.
 - **`timeout-minutes` templating support** beyond the main agent job (`workflow_call` input forwarding works today; expanded surfaces still TBD).

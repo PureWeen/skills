@@ -15,6 +15,7 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 | `--safe-update` CLI flag | `--approve` | Update scripts/docs |
 | `features.copilot-requests: true` | `permissions.copilot-requests: write` | `gh aw fix --write` |
 | `tools.serena` | Remove; configure an MCP server explicitly if still needed | Manual edit |
+| `safe-outputs.mentions.allow-team-members:` | `allowed-collaborators:` (old name kept as a deprecated alias) | `gh aw fix --write` (codemod: `add-allow-team-members-collaborators`) |
 | `max-effective-tokens:` / `max-daily-effective-tokens:` | `max-ai-credits:` / `max-daily-ai-credits:` (AIC: 1 AIC = $0.01; new defaults: 1000/run, opt-in daily cap) | `gh aw fix --write` (codemod: `effective-tokens-to-ai-credits`, including `-1` sentinel) |
 | `engine.max-turns:` | Top-level `max-turns:` | `gh aw fix --write` (codemod: `engine-max-turns-to-top-level`) |
 | `features.user-invokable:` / `features.disable-model-invocation:` | Remove (validation error — Copilot-specific knobs never honored by gh-aw) | Manual edit |
@@ -23,6 +24,16 @@ Reference for migrating deprecated patterns and version-specific bug history. On
 ## Version-Specific Bug History
 
 These are bugs that were fixed. If you encounter them, upgrade to the version indicated.
+
+### Fixed in v0.80.9
+- **BREAKING: `safe-outputs.mentions.allow-team-members` renamed to `allowed-collaborators`** — The old key is retained as a deprecated alias (existing workflows keep compiling), but new ones should use `allowed-collaborators`. Run `gh aw fix --write` (codemod `add-allow-team-members-collaborators`). The same `mentions` block also gained `allowed-teams` to authorize whole GitHub teams without listing usernames; team-member lookup needs a token with `read:org` scope (the default `GITHUB_TOKEN` lacks it). ([#40394](https://github.com/github/gh-aw/pull/40394))
+- **`max-patch-size` default raised 1 MB → 4 MB (4096 KB)** — PR-producing safe outputs (`create-pull-request`, `push-to-pull-request-branch`) now allow larger diffs by default (range 1–10,240 KB). Re-check any workflow that relied on the old 1 MB ceiling as an implicit guardrail and set an explicit `max-patch-size` if you want small, reviewable edits.
+- **Default AWF firewall bumped to v0.27.7** (was 0.27.2) — Recompile lock files (`gh aw compile`) to ship the new firewall binary; re-review `network.allowed` behavior if you observe newly blocked/allowed hosts.
+- **`max-turn-cache-misses` runaway-loop guardrail added** — New top-level field caps consecutive AWF API-proxy cache misses before the proxy blocks further model requests (maps to `apiProxy.maxCacheMisses`).
+- **MCP stdio error handling** — `handleMessage` now serialises plain-object throws (not just `Error` instances), eliminating cryptic `-32603 [object Object]` failures that blocked `submit_pull_request_review` on the stdio transport path. ([#40715](https://github.com/github/gh-aw/pull/40715))
+- **Atomic temp-file writes (CWE-377)** — Safe-output/artifact temp files are written atomically, closing a predictable-temp-file race / symlink-tampering window.
+- **Issue Monster noise reduction** — "copilot coding agent is not available for this repository" agent-availability errors are now treated as transient and skipped, so the issue tracker is no longer spammed with failure issues every poll cycle. ([#40716](https://github.com/github/gh-aw/pull/40716))
+- **`assignAgentToIssue` migrated to REST** (GraphQL fallback retained in lookup helpers for resilience). ([#40669](https://github.com/github/gh-aw/pull/40669))
 
 ### Fixed in v0.79.8
 - **`copilot-requests: write` promoted to recommended path (no PAT)** — GitHub Agentic Workflows now supports billing Copilot inference through the per-run `GITHUB_TOKEN` instead of a `COPILOT_GITHUB_TOKEN` PAT. When the permission is set, AI Credits bill to the **organization** that owns the repository, and `COPILOT_GITHUB_TOKEN` / `GH_AW_GITHUB_TOKEN` are **ignored for inference**. Requires the "Allow use of Copilot CLI billed to the organization" Copilot org policy (default-on if the "Copilot CLI" policy is enabled). User-level inference budgets do not apply to org-billed runs — cap spend with `max-ai-credits:` / `max-daily-ai-credits:` or assign the org to a [cost center](https://docs.github.com/billing/concepts/cost-centers) with a budget. See [GitHub Changelog 2026-06-11](https://github.blog/changelog/2026-06-11-agentic-workflows-no-longer-need-a-personal-access-token/).

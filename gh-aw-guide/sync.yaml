@@ -51,6 +51,9 @@ sources:
   # Cost / billing reference (added v0.79.4 with the AIC rename)
   - url: https://github.github.com/gh-aw/reference/cost-management/
     sections: ["Engine & Runtime Updates", "Anti-Patterns"]
+  - url: https://github.github.com/gh-aw/reference/billing/
+    sections: ["Engine & Runtime Updates", "Anti-Patterns"]
+    reason: "Dedicated billing reference page added in v0.80.3"
   - url: https://github.github.com/gh-aw/reference/auth/
     sections: ["Engine & Runtime Updates", "Security Boundaries"]
   - url: https://github.blog/changelog/2026-06-11-agentic-workflows-no-longer-need-a-personal-access-token/
@@ -120,7 +123,7 @@ sources:
 
   # GitHub releases — check for new stable versions
   - releases: github/gh-aw
-    last_reviewed_release: v0.79.8
+    last_reviewed_release: v0.80.9
 
 style: |
   Match existing section structure. Use tables for feature comparisons.
